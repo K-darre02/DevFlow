@@ -118,3 +118,49 @@ export interface AcceptInvitationRequest {
 export interface ChangeRoleRequest {
   role: TenantRole
 }
+
+// Mirrors DevFlow.Domain.Enums.ActivityType / ActivityEntityType.
+export type ActivityType =
+  | 'ProjectCreated'
+  | 'ProjectArchived'
+  | 'TaskCreated'
+  | 'TaskUpdated'
+  | 'TaskDeleted'
+  | 'TaskMoved'
+  | 'TaskAssigned'
+  | 'TaskCompleted'
+  | 'MemberInvited'
+  | 'MemberJoined'
+  | 'RoleChanged'
+  | 'MemberRemoved'
+
+export type ActivityEntityType = 'Project' | 'Task' | 'Invitation' | 'TeamMember'
+
+export interface Activity {
+  id: string
+  activityType: ActivityType
+  entityType: ActivityEntityType
+  entityId: string
+  description: string
+  /** Raw JSON string, shape varies by activityType — parse only where needed (e.g. TaskMoved's fromStatus/toStatus). */
+  metadata: string | null
+  userId: string | null
+  /** Resolved server-side via a join — null only if userId is null. */
+  userEmail: string | null
+  createdAt: string
+}
+
+export interface PagedResponse<T> {
+  items: T[]
+  totalCount: number
+  page: number
+  pageSize: number
+}
+
+export interface GetActivitiesParams {
+  page?: number
+  pageSize?: number
+  entityType?: ActivityEntityType
+  userId?: string
+  activityType?: ActivityType
+}

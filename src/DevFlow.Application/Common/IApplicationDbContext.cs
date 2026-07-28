@@ -27,5 +27,7 @@ public interface IApplicationDbContext
 
     DbSet<TaskItem> TaskItems { get; }
 
+    DbSet<ActivityLog> ActivityLogs { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

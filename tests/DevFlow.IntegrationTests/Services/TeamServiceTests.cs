@@ -1,4 +1,5 @@
 using DevFlow.Application.Common.Exceptions;
+using DevFlow.Application.Realtime;
 using DevFlow.Application.Team;
 using DevFlow.Domain.Entities;
 using DevFlow.Domain.Enums;
@@ -7,6 +8,7 @@ using FluentAssertions;
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace DevFlow.IntegrationTests.Services;
@@ -19,6 +21,7 @@ namespace DevFlow.IntegrationTests.Services;
 public class TeamServiceTests : SqliteContextFixture
 {
     private readonly ITeamService _service;
+    private readonly RecordingPublisher _publisher = new();
 
     public TeamServiceTests()
     {
@@ -27,7 +30,9 @@ public class TeamServiceTests : SqliteContextFixture
             CurrentUser,
             new PasswordHasher<User>(),
             new InviteMemberInputValidator(DbContext),
-            new AcceptInvitationInputValidator(DbContext));
+            new AcceptInvitationInputValidator(DbContext),
+            _publisher,
+            NullLogger<TeamService>.Instance);
     }
 
     private async Task<(Tenant Tenant, User Owner, TenantMember Membership)> SeedTenantWithOwnerAsync()

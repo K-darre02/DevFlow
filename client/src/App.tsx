@@ -7,6 +7,7 @@ import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { TeamPage } from './pages/TeamPage'
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
+import { ActivityPage } from './pages/ActivityPage'
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/team" element={<TeamPage />} />
+          <Route path="/activity" element={<ActivityPage />} />
         </Route>
       </Route>
 

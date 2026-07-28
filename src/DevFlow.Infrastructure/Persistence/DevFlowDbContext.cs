@@ -27,6 +27,8 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
 
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
 
+    public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DevFlowDbContext).Assembly);
@@ -47,6 +49,7 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<Invitation>().HasQueryFilter(i => i.TenantId == _currentUserService.TenantId);
         modelBuilder.Entity<Project>().HasQueryFilter(p => p.TenantId == _currentUserService.TenantId);
         modelBuilder.Entity<TaskItem>().HasQueryFilter(t => t.TenantId == _currentUserService.TenantId);
+        modelBuilder.Entity<ActivityLog>().HasQueryFilter(a => a.TenantId == _currentUserService.TenantId);
 
         base.OnModelCreating(modelBuilder);
     }
@@ -81,6 +84,18 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
             if (entry.State == EntityState.Modified)
             {
                 entry.Entity.Version++;
+            }
+        }
+
+        // See ActivityLog.CreatedAtTicks — a plain long proxy for CreatedAt
+        // that pagination can ORDER BY (SQLite's provider can't translate
+        // ordering by CreatedAt itself). Set from the same `now` as
+        // CreatedAt above so the two never disagree.
+        foreach (var entry in ChangeTracker.Entries<ActivityLog>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAtTicks = now.Ticks;
             }
         }
 

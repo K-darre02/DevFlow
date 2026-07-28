@@ -1,10 +1,13 @@
 using DevFlow.Application.Common;
 using DevFlow.Application.Common.Exceptions;
+using DevFlow.Application.Realtime;
 using DevFlow.Domain.Entities;
 using DevFlow.Domain.Enums;
 using FluentValidation;
+using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DevFlow.Application.Team;
 
@@ -15,19 +18,25 @@ public class TeamService : ITeamService
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly IValidator<InviteMemberInput> _inviteValidator;
     private readonly IValidator<AcceptInvitationInput> _acceptValidator;
+    private readonly IPublisher _publisher;
+    private readonly ILogger<TeamService> _logger;
 
     public TeamService(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
         IPasswordHasher<User> passwordHasher,
         IValidator<InviteMemberInput> inviteValidator,
-        IValidator<AcceptInvitationInput> acceptValidator)
+        IValidator<AcceptInvitationInput> acceptValidator,
+        IPublisher publisher,
+        ILogger<TeamService> logger)
     {
         _context = context;
         _currentUserService = currentUserService;
         _passwordHasher = passwordHasher;
         _inviteValidator = inviteValidator;
         _acceptValidator = acceptValidator;
+        _publisher = publisher;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<TenantMember>> GetMembersAsync(CancellationToken cancellationToken)
@@ -66,6 +75,8 @@ public class TeamService : ITeamService
 
         _context.Invitations.Add(invitation);
         await _context.SaveChangesAsync(cancellationToken);
+
+        await PublishSafeAsync(new MemberInvitedNotification(invitation), cancellationToken);
 
         return (invitation, rawToken);
     }
@@ -132,6 +143,8 @@ public class TeamService : ITeamService
             throw new ForbiddenException("You are already a member of this workspace.");
         }
 
+        await PublishSafeAsync(new MemberJoinedNotification(membership), cancellationToken);
+
         return (user, membership);
     }
 
@@ -149,15 +162,21 @@ public class TeamService : ITeamService
             await EnsureAnotherOwnerExistsAsync(excludingMemberId: member.Id, cancellationToken);
         }
 
+        var previousRole = member.Role;
         member.Role = newRole;
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (previousRole != newRole)
+        {
+            await PublishSafeAsync(new RoleChangedNotification(member, previousRole), cancellationToken);
+        }
 
         return member;
     }
 
     public async Task<bool> RemoveMemberAsync(Guid memberId, CancellationToken cancellationToken)
     {
-        var member = await _context.TenantMembers.FirstOrDefaultAsync(m => m.Id == memberId, cancellationToken);
+        var member = await _context.TenantMembers.Include(m => m.User).FirstOrDefaultAsync(m => m.Id == memberId, cancellationToken);
 
         if (member is null)
         {
@@ -181,6 +200,8 @@ public class TeamService : ITeamService
         _context.TenantMembers.Remove(member);
         await _context.SaveChangesAsync(cancellationToken);
 
+        await PublishSafeAsync(new MemberRemovedNotification(member), cancellationToken);
+
         return true;
     }
 
@@ -195,6 +216,22 @@ public class TeamService : ITeamService
         if (remainingOwners == 0)
         {
             throw new ForbiddenException("A workspace must always have at least one Owner.");
+        }
+    }
+
+    // Swallows and logs rather than rethrowing — same rationale as
+    // TaskService/ProjectService.PublishSafeAsync: a broadcast/activity-log
+    // failure must never turn an already-committed, otherwise-successful
+    // write into an error for the caller.
+    private async Task PublishSafeAsync(INotification notification, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _publisher.Publish(notification, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish {NotificationType} after a successful team write", notification.GetType().Name);
         }
     }
 }

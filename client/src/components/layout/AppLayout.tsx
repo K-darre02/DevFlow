@@ -20,6 +20,9 @@ export function AppLayout() {
             <Link to="/team" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Team
             </Link>
+            <Link to="/activity" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+              Activity
+            </Link>
           </div>
           <div className="flex items-center gap-4">
             <ConnectionStatusIndicator status={connectionStatus} />

@@ -107,8 +107,13 @@ public static class DependencyInjection
         // RegisterServicesFromAssembly call, scoped to this assembly, is
         // what actually wires them up; MediatR's core services
         // (IMediator/ISender/IPublisher) are safe to register more than
-        // once.
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+        // once. NotificationPublisher is set identically here too — see the
+        // comment on the Application-layer AddMediatR call for why.
+        services.AddMediatR(cfg =>
+        {
+            cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
+            cfg.NotificationPublisher = new MediatR.NotificationPublishers.TaskWhenAllPublisher();
+        });
 
         AddJwtAuthentication(services, configuration);
 
