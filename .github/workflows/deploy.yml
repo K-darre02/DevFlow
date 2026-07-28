@@ -1,0 +1,150 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Prevents two pushes to main from racing each other through migration +
+# deploy at the same time; a run already in flight finishes before the next
+# one starts (no cancel-in-progress — an in-flight deploy shouldn't be cut
+# off mid-way).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # Re-run in full here rather than trusting a separate ci.yml run against
+  # the same commit — this is what actually gates the deploy jobs below via
+  # `needs`, so it has to happen inside this workflow.
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore DevFlow.sln
+
+      - name: Build
+        run: dotnet build DevFlow.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test DevFlow.sln --no-build --configuration Release
+
+      - name: Publish API
+        run: >
+          dotnet publish src/DevFlow.Api/DevFlow.Api.csproj
+          --no-build --configuration Release
+          --output ${{ runner.temp }}/publish/api
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-package
+          path: ${{ runner.temp }}/publish/api
+          retention-days: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+        working-directory: client
+
+      - run: npm run lint
+        working-directory: client
+
+      # Builds straight into src/DevFlow.Web/wwwroot (see client/vite.config.ts's
+      # outDir comment) — that directory is what gets uploaded below, not
+      # client/dist.
+      - run: npm run build
+        working-directory: client
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spa-package
+          path: src/DevFlow.Web/wwwroot
+          retention-days: 1
+
+  # Applies whatever migrations the target database is missing (currently
+  # just InitialCreate) before the new API code that expects that schema
+  # goes live — see infra/README.md's Migrations strategy section for why
+  # this isn't done as an auto-migrate-on-startup instead.
+  migrate-database:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - run: dotnet tool install --global dotnet-ef
+
+      - name: Build migration bundle
+        run: >
+          dotnet ef migrations bundle
+          --project src/DevFlow.Infrastructure/DevFlow.Infrastructure.csproj
+          --startup-project src/DevFlow.Api/DevFlow.Api.csproj
+          --self-contained -r linux-x64
+          --output ${{ runner.temp }}/efbundle
+          --configuration Release
+
+      - name: Apply migrations
+        env:
+          CONNECTION_STRING: ${{ secrets.AZURE_POSTGRES_CONNECTION_STRING }}
+        run: ${{ runner.temp }}/efbundle --connection "$CONNECTION_STRING"
+
+  deploy-api:
+    needs: migrate-database
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for azure/login's OIDC federated-credential flow — no
+      # client secret stored in GitHub at all, see README.md's Deployment
+      # section for how the federated credential itself is set up.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-package
+          path: publish/api
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_API_APP_NAME }}
+          package: publish/api
+
+  deploy-frontend:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spa-package
+          path: spa
+
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: spa
+          # Already built above (npm run build) — this action shouldn't try
+          # to build it again itself.
+          skip_app_build: true

@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore DevFlow.sln
+
+      - name: Build
+        run: dotnet build DevFlow.sln --no-restore --configuration Release
+
+      # Runs both test projects — DevFlow.IntegrationTests (the real
+      # coverage: Sqlite-backed service tests + full-pipeline HTTP tests,
+      # see tests/DevFlow.IntegrationTests/TestSupport) and
+      # DevFlow.UnitTests (currently empty; "no tests found" exits 0, not a
+      # failure).
+      - name: Test
+        run: dotnet test DevFlow.sln --no-build --configuration Release
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # tsc -b && vite build (see client/package.json) — type errors fail
+      # the build, not just lint warnings.
+      - name: Build
+        run: npm run build
