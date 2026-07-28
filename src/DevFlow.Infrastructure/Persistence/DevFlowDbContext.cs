@@ -19,6 +19,10 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
 
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<TenantMember> TenantMembers => Set<TenantMember>();
+
+    public DbSet<Invitation> Invitations => Set<Invitation>();
+
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
@@ -36,7 +40,11 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
         // whichever tenant happened to build the model first into every future query,
         // for every user, permanently. Referencing the field itself lets EF Core
         // re-evaluate it per query against this context instance.
-        modelBuilder.Entity<User>().HasQueryFilter(u => u.TenantId == _currentUserService.TenantId);
+        //
+        // User has no filter here — it's intentionally global (see User.cs);
+        // TenantMember is what carries tenant scoping for user-related data now.
+        modelBuilder.Entity<TenantMember>().HasQueryFilter(m => m.TenantId == _currentUserService.TenantId);
+        modelBuilder.Entity<Invitation>().HasQueryFilter(i => i.TenantId == _currentUserService.TenantId);
         modelBuilder.Entity<Project>().HasQueryFilter(p => p.TenantId == _currentUserService.TenantId);
         modelBuilder.Entity<TaskItem>().HasQueryFilter(t => t.TenantId == _currentUserService.TenantId);
 

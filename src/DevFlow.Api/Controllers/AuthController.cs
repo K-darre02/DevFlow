@@ -1,6 +1,7 @@
 using DevFlow.Api.Contracts.Auth;
 using DevFlow.Api.Services;
 using DevFlow.Domain.Entities;
+using DevFlow.Domain.Enums;
 using DevFlow.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -25,17 +26,14 @@ public class AuthController : ControllerBase
         _tokenService = tokenService;
     }
 
-    // Creates a new Tenant and its first User atomically. There is no
-    // authenticated tenant context yet at this point in the request, so the
-    // email-uniqueness check below deliberately bypasses the tenant query
-    // filter (IgnoreQueryFilters) — see DevFlowDbContext for why that filter
-    // exists and why this is the documented, legitimate way to opt out of it.
+    // Creates a new Tenant, its first User, and a TenantMember(Owner) linking
+    // them, atomically. Users has no tenant query filter at all (it's a
+    // global entity — see User.cs), so no IgnoreQueryFilters is needed here
+    // the way it is for TenantMembers/Invitations elsewhere.
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
-        var emailTaken = await _dbContext.Users
-            .IgnoreQueryFilters()
-            .AnyAsync(u => u.Email == request.Email, cancellationToken);
+        var emailTaken = await _dbContext.Users.AnyAsync(u => u.Email == request.Email, cancellationToken);
 
         if (emailTaken)
         {
@@ -44,16 +42,21 @@ public class AuthController : ControllerBase
 
         var tenant = new Tenant { Name = request.TenantName };
 
-        var user = new User
+        var user = new User { Email = request.Email };
+        user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
+
+        var membership = new TenantMember
         {
             TenantId = tenant.Id,
             Tenant = tenant,
-            Email = request.Email
+            UserId = user.Id,
+            User = user,
+            Role = TenantRole.Owner
         };
-        user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
         _dbContext.Tenants.Add(tenant);
         _dbContext.Users.Add(user);
+        _dbContext.TenantMembers.Add(membership);
 
         try
         {
@@ -68,23 +71,19 @@ public class AuthController : ControllerBase
             return Conflict("A user with this email already exists.");
         }
 
-        var (accessToken, expiresAt) = _tokenService.GenerateToken(user);
+        var (accessToken, expiresAt) = _tokenService.GenerateToken(user, tenant.Id, TenantRole.Owner);
 
         // Plain 201 rather than CreatedAtAction: there's no GetUser/GetTenant
         // endpoint yet for a Location header to meaningfully point at.
         return StatusCode(
             StatusCodes.Status201Created,
-            new AuthResponse(accessToken, expiresAt, tenant.Id, user.Id, user.Email));
+            new AuthResponse(accessToken, expiresAt, tenant.Id, user.Id, user.Email, TenantRole.Owner));
     }
 
-    // Same IgnoreQueryFilters reasoning as Register: no tenant is known yet —
-    // finding out which tenant this user belongs to is the whole point of this call.
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
+        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
         if (user is null)
         {
@@ -104,8 +103,28 @@ public class AuthController : ControllerBase
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        var (accessToken, expiresAt) = _tokenService.GenerateToken(user);
+        // A User can hold memberships in multiple tenants (TenantMember).
+        // There's no tenant-picker UI yet, so a login token is issued for
+        // the earliest (first-joined) membership — a deliberate, documented
+        // simplification, not an oversight; a real multi-tenant switcher is
+        // a separate feature. IgnoreQueryFilters: no tenant context exists
+        // yet, discovering one is the point of this query.
+        var membership = await _dbContext.TenantMembers
+            .IgnoreQueryFilters()
+            .Where(m => m.UserId == user.Id)
+            .OrderBy(m => m.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        return Ok(new AuthResponse(accessToken, expiresAt, user.TenantId, user.Id, user.Email));
+        if (membership is null)
+        {
+            // Not reachable via this system's own flows today (Register and
+            // Invitation-Accept both always create a membership) — defended
+            // against anyway rather than risking a NullReferenceException.
+            return Unauthorized("This account does not belong to any workspace.");
+        }
+
+        var (accessToken, expiresAt) = _tokenService.GenerateToken(user, membership.TenantId, membership.Role);
+
+        return Ok(new AuthResponse(accessToken, expiresAt, membership.TenantId, user.Id, user.Email, membership.Role));
     }
 }

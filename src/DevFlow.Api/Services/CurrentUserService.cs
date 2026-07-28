@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using DevFlow.Application.Common;
+using DevFlow.Domain.Enums;
 
 namespace DevFlow.Api.Services;
 
@@ -15,6 +16,15 @@ public class CurrentUserService : ICurrentUserService
     public Guid? UserId => GetGuidClaim(JwtRegisteredClaimNames.Sub);
 
     public Guid? TenantId => GetGuidClaim("tenant_id");
+
+    public TenantRole? Role
+    {
+        get
+        {
+            var value = _httpContextAccessor.HttpContext?.User?.FindFirst("role")?.Value;
+            return Enum.TryParse<TenantRole>(value, out var role) ? role : null;
+        }
+    }
 
     private Guid? GetGuidClaim(string claimType)
     {

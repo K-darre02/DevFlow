@@ -22,6 +22,54 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("DevFlow.Domain.Entities.Invitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InvitedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvitedByUserId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Email");
+
+                    b.ToTable("Invitations");
+                });
+
             modelBuilder.Entity("DevFlow.Domain.Entities.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -130,6 +178,37 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                     b.ToTable("Tenants");
                 });
 
+            modelBuilder.Entity("DevFlow.Domain.Entities.TenantMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("TenantMembers");
+                });
+
             modelBuilder.Entity("DevFlow.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -148,9 +227,6 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -159,9 +235,26 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.HasIndex("TenantId");
-
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("DevFlow.Domain.Entities.Invitation", b =>
+                {
+                    b.HasOne("DevFlow.Domain.Entities.User", "InvitedByUser")
+                        .WithMany()
+                        .HasForeignKey("InvitedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DevFlow.Domain.Entities.Tenant", "Tenant")
+                        .WithMany("Invitations")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InvitedByUser");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("DevFlow.Domain.Entities.Project", b =>
@@ -201,15 +294,23 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("DevFlow.Domain.Entities.User", b =>
+            modelBuilder.Entity("DevFlow.Domain.Entities.TenantMember", b =>
                 {
                     b.HasOne("DevFlow.Domain.Entities.Tenant", "Tenant")
-                        .WithMany("Users")
+                        .WithMany("Members")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("DevFlow.Domain.Entities.User", "User")
+                        .WithMany("TenantMemberships")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Tenant");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("DevFlow.Domain.Entities.Project", b =>
@@ -219,9 +320,16 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("DevFlow.Domain.Entities.Tenant", b =>
                 {
-                    b.Navigation("Projects");
+                    b.Navigation("Invitations");
 
-                    b.Navigation("Users");
+                    b.Navigation("Members");
+
+                    b.Navigation("Projects");
+                });
+
+            modelBuilder.Entity("DevFlow.Domain.Entities.User", b =>
+                {
+                    b.Navigation("TenantMemberships");
                 });
 #pragma warning restore 612, 618
         }

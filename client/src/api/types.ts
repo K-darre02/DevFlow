@@ -14,12 +14,17 @@ export interface LoginRequest {
   password: string
 }
 
+// Mirrors DevFlow.Domain.Enums.TenantRole — serialized as a string
+// (JsonStringEnumConverter, see DevFlow.Api/DependencyInjection.cs).
+export type TenantRole = 'Owner' | 'Admin' | 'Member'
+
 export interface AuthResponse {
   accessToken: string
   expiresAt: string
   tenantId: string
   userId: string
   email: string
+  role: TenantRole
 }
 
 export interface Project {
@@ -79,4 +84,37 @@ export interface UpdateTaskRequest {
   priority?: TaskPriority
   assigneeUserId?: string
   dueDate?: string
+}
+
+export interface TeamMember {
+  id: string
+  userId: string
+  email: string
+  role: TenantRole
+  joinedAt: string
+}
+
+export interface InviteMemberRequest {
+  email: string
+  role: TenantRole
+}
+
+// Token is the raw, one-time invitation token — see
+// DevFlow.Api/Contracts/Team/InvitationResponse.cs. There is no email
+// delivery yet, so the inviter shares the accept link out of band.
+export interface Invitation {
+  id: string
+  email: string
+  role: TenantRole
+  expiresAt: string
+  token: string
+}
+
+export interface AcceptInvitationRequest {
+  token: string
+  password: string
+}
+
+export interface ChangeRoleRequest {
+  role: TenantRole
 }

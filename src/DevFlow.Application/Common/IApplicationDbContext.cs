@@ -19,6 +19,10 @@ public interface IApplicationDbContext
 
     DbSet<User> Users { get; }
 
+    DbSet<TenantMember> TenantMembers { get; }
+
+    DbSet<Invitation> Invitations { get; }
+
     DbSet<Project> Projects { get; }
 
     DbSet<TaskItem> TaskItems { get; }

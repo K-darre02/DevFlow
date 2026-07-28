@@ -1,3 +1,5 @@
+using DevFlow.Domain.Enums;
+
 namespace DevFlow.Application.Common;
 
 /// <summary>
@@ -12,4 +14,13 @@ public interface ICurrentUserService
     Guid? UserId { get; }
 
     Guid? TenantId { get; }
+
+    /// <summary>
+    /// The caller's role within the active tenant, from the JWT's "role"
+    /// claim. Like TenantId, this reflects whatever was true when the token
+    /// was issued — a role change takes up to the access-token lifetime
+    /// (15 min) to be reflected in a *new* token; see
+    /// docs/devflow/04-security.md §4.
+    /// </summary>
+    TenantRole? Role { get; }
 }

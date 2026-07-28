@@ -5,6 +5,8 @@ import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
+import { TeamPage } from './pages/TeamPage'
+import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
 
 function App() {
   return (
@@ -14,10 +16,17 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
       </Route>
 
+      {/* Not gated by ProtectedRoute/PublicOnlyRoute: an invite may be
+          accepted by an anonymous visitor or by someone already signed in
+          to a different tenant — both are valid, and accepting always
+          issues a fresh, invitation-scoped session either way. */}
+      <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
+          <Route path="/team" element={<TeamPage />} />
         </Route>
       </Route>
 

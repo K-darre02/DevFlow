@@ -1,3 +1,5 @@
+using DevFlow.Domain.Enums;
+
 namespace DevFlow.Api.Contracts.Auth;
 
 public record AuthResponse(
@@ -5,4 +7,5 @@ public record AuthResponse(
     DateTimeOffset ExpiresAt,
     Guid TenantId,
     Guid UserId,
-    string Email);
+    string Email,
+    TenantRole Role);

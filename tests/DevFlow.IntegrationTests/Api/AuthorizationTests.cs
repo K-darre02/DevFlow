@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using DevFlow.Api.Contracts.Projects;
 using DevFlow.Api.Services;
 using DevFlow.Domain.Entities;
+using DevFlow.Domain.Enums;
 using DevFlow.Infrastructure.Persistence;
 using DevFlow.IntegrationTests.TestSupport;
 using FluentAssertions;
@@ -97,10 +98,11 @@ public class AuthorizationTests : IDisposable
     private async Task<(Guid TenantId, Guid ProjectId, Guid UserId)> SeedOneTenantWithProjectAsync(DevFlowDbContext context, string label)
     {
         var tenant = new Tenant { Name = $"Tenant {label}" };
-        var user = new User { TenantId = tenant.Id, Tenant = tenant, Email = $"{label}@example.com", PasswordHash = "unused-in-these-tests" };
+        var user = new User { Email = $"{label}@example.com", PasswordHash = "unused-in-these-tests" };
+        var membership = new TenantMember { TenantId = tenant.Id, Tenant = tenant, UserId = user.Id, User = user, Role = TenantRole.Owner };
         var project = new Project { TenantId = tenant.Id, Tenant = tenant, Name = $"Project {label}" };
 
-        context.AddRange(tenant, user, project);
+        context.AddRange(tenant, user, membership, project);
         await context.SaveChangesAsync();
 
         return (tenant.Id, project.Id, user.Id);
@@ -114,7 +116,7 @@ public class AuthorizationTests : IDisposable
         return (a, b);
     }
 
-    private static string GenerateToken(Guid tenantId, Guid userId)
+    private static string GenerateToken(Guid tenantId, Guid userId, TenantRole role = TenantRole.Owner)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -126,8 +128,8 @@ public class AuthorizationTests : IDisposable
             })
             .Build();
 
-        var user = new User { Id = userId, TenantId = tenantId, Email = "test@example.com" };
-        var (accessToken, _) = new JwtTokenService(configuration).GenerateToken(user);
+        var user = new User { Id = userId, Email = "test@example.com" };
+        var (accessToken, _) = new JwtTokenService(configuration).GenerateToken(user, tenantId, role);
         return accessToken;
     }
 }

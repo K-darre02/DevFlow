@@ -2,17 +2,16 @@ using DevFlow.Domain.Common;
 
 namespace DevFlow.Domain.Entities;
 
-// Simplified for this phase: a User belongs directly to one Tenant.
-// The target design (docs/devflow/02-database-design.md) has Users as
-// tenant-independent, joined to Tenants via a TenantMemberships table
-// (many-to-many with a role) — that lands once auth/membership is built.
-public class User : BaseEntity, ITenantOwned
+// Tenant-independent, as originally documented (docs/devflow/02-database-design.md):
+// one login can hold memberships in multiple tenants via TenantMember. This
+// replaces the earlier single-tenant-per-user simplification (User no longer
+// implements ITenantOwned, has no TenantId) now that the membership system
+// this was always deferred pending — Team Management — actually exists.
+public class User : BaseEntity
 {
-    public Guid TenantId { get; set; }
-
-    public Tenant Tenant { get; set; } = null!;
-
     public string Email { get; set; } = string.Empty;
 
     public string PasswordHash { get; set; } = string.Empty;
+
+    public ICollection<TenantMember> TenantMemberships { get; set; } = new List<TenantMember>();
 }

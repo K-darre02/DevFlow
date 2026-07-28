@@ -1,6 +1,7 @@
 using System.Reflection;
 using DevFlow.Application.Projects;
 using DevFlow.Application.Tasks;
+using DevFlow.Application.Team;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ public static class DependencyInjection
 
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<ITeamService, TeamService>();
 
         return services;
     }

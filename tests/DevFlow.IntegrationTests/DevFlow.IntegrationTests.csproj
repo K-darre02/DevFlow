@@ -24,6 +24,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- WebApplicationFactory<Program> relies on a process-wide diagnostic
+         listener (HostFactoryResolver) to build each test's host; running
+         multiple test classes' factories concurrently races on that shared
+         static state and intermittently fails with "entry point exited
+         without ever building an IHost". Disabling cross-collection
+         parallelism avoids it — the suite is fast enough that this costs
+         nothing noticeable. -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\DevFlow.Api\DevFlow.Api.csproj" />
   </ItemGroup>
 

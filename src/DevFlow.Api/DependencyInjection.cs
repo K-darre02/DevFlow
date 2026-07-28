@@ -4,6 +4,7 @@ using DevFlow.Api.Middleware;
 using DevFlow.Api.Services;
 using DevFlow.Application.Common;
 using DevFlow.Domain.Entities;
+using DevFlow.Domain.Enums;
 using DevFlow.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -108,6 +109,17 @@ public static class DependencyInjection
                 };
             });
 
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            // Both check the JWT's "role" claim (JwtTokenService/CurrentUserService).
+            // Domain-level rules that depend on the specific member being acted
+            // on (e.g. "an Admin can't remove an Owner") aren't expressible as a
+            // static policy — those live in TeamService, via ForbiddenException.
+            options.AddPolicy(AuthorizationPolicies.OwnerOnly, policy =>
+                policy.RequireClaim("role", nameof(TenantRole.Owner)));
+
+            options.AddPolicy(AuthorizationPolicies.AdminOrOwner, policy =>
+                policy.RequireClaim("role", nameof(TenantRole.Owner), nameof(TenantRole.Admin)));
+        });
     }
 }

@@ -1,12 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { AuthResponse } from '../api/types'
+import type { AuthResponse, TenantRole } from '../api/types'
 import { isTokenExpired } from './jwt'
 
 interface AuthUser {
   userId: string
   tenantId: string
   email: string
+  role: TenantRole
 }
 
 interface AuthState {
@@ -34,7 +35,7 @@ export const useAuthStore = create<AuthState>()(
       login: (auth) =>
         set({
           accessToken: auth.accessToken,
-          user: { userId: auth.userId, tenantId: auth.tenantId, email: auth.email },
+          user: { userId: auth.userId, tenantId: auth.tenantId, email: auth.email, role: auth.role },
           isAuthenticated: true,
         }),
       logout: () => set({ accessToken: null, user: null, isAuthenticated: false }),
