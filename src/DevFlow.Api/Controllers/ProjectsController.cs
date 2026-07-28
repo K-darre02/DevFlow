@@ -1,6 +1,8 @@
 using DevFlow.Api.Contracts.Projects;
+using DevFlow.Application.Common;
 using DevFlow.Domain.Entities;
 using DevFlow.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,33 +10,29 @@ namespace DevFlow.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class ProjectsController : ControllerBase
 {
     private readonly DevFlowDbContext _dbContext;
+    private readonly ICurrentUserService _currentUserService;
 
-    public ProjectsController(DevFlowDbContext dbContext)
+    public ProjectsController(DevFlowDbContext dbContext, ICurrentUserService currentUserService)
     {
         _dbContext = dbContext;
+        _currentUserService = currentUserService;
     }
 
-    // Tenant scoping is a required query parameter for now rather than derived
-    // from a JWT claim, because auth/tenant-resolution middleware doesn't exist
-    // yet (see docs/devflow/04-security.md §2 for the target design). This is a
-    // deliberate, temporary simplification for this first vertical slice — not
-    // a claim that this endpoint is tenant-isolation-safe as-is.
+    // No explicit TenantId filter here, and none needed: DevFlowDbContext's
+    // global query filter already scopes every query on this DbSet to the
+    // authenticated caller's TenantId claim (see DevFlowDbContext and
+    // docs/devflow/04-security.md §2). [Authorize] guarantees a valid JWT —
+    // and therefore a resolvable TenantId — got this far.
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetProjects(
-        [FromQuery] Guid tenantId,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetProjects(CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest("tenantId is required.");
-        }
-
         var projects = await _dbContext.Projects
             .AsNoTracking()
-            .Where(p => p.TenantId == tenantId && !p.IsArchived)
+            .Where(p => !p.IsArchived)
             .OrderBy(p => p.Name)
             .Select(p => new ProjectResponse(p.Id, p.TenantId, p.Name, p.IsArchived, p.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -47,17 +45,14 @@ public class ProjectsController : ControllerBase
         [FromBody] CreateProjectRequest request,
         CancellationToken cancellationToken)
     {
-        var tenantExists = await _dbContext.Tenants
-            .AnyAsync(t => t.Id == request.TenantId, cancellationToken);
-
-        if (!tenantExists)
-        {
-            return BadRequest($"Tenant '{request.TenantId}' does not exist.");
-        }
+        // Guaranteed non-null: [Authorize] rejects the request before this runs
+        // unless the JWT validated successfully, and every token this system
+        // issues carries a tenant_id claim (JwtTokenService).
+        var tenantId = _currentUserService.TenantId!.Value;
 
         var project = new Project
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             Name = request.Name
         };
 
@@ -66,6 +61,6 @@ public class ProjectsController : ControllerBase
 
         var response = new ProjectResponse(project.Id, project.TenantId, project.Name, project.IsArchived, project.CreatedAt);
 
-        return CreatedAtAction(nameof(GetProjects), new { tenantId = project.TenantId }, response);
+        return CreatedAtAction(nameof(GetProjects), response);
     }
 }

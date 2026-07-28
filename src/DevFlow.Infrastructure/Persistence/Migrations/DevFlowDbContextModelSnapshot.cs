@@ -154,8 +154,10 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "Email")
+                    b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("Users");
                 });

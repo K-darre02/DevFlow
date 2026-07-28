@@ -22,7 +22,7 @@ try
     builder.Services
         .AddApplicationServices()
         .AddInfrastructureServices(builder.Configuration)
-        .AddApiServices();
+        .AddApiServices(builder.Configuration);
 
     var app = builder.Build();
 
@@ -33,6 +33,7 @@ try
     }
 
     app.UseHttpsRedirection();
+    app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapControllers();

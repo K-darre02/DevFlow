@@ -1,3 +1,4 @@
+using DevFlow.Application.Common;
 using DevFlow.Domain.Common;
 using DevFlow.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -6,9 +7,12 @@ namespace DevFlow.Infrastructure.Persistence;
 
 public class DevFlowDbContext : DbContext
 {
-    public DevFlowDbContext(DbContextOptions<DevFlowDbContext> options)
+    private readonly ICurrentUserService _currentUserService;
+
+    public DevFlowDbContext(DbContextOptions<DevFlowDbContext> options, ICurrentUserService currentUserService)
         : base(options)
     {
+        _currentUserService = currentUserService;
     }
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
@@ -22,6 +26,20 @@ public class DevFlowDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DevFlowDbContext).Assembly);
+
+        // Tenant isolation as a structural property (docs/devflow/04-security.md §2),
+        // not a per-query convention. IMPORTANT: these lambdas reference
+        // `_currentUserService.TenantId` directly (an instance field access), not a
+        // local variable captured from a snapshot — OnModelCreating runs once per
+        // DbContext *type* (the compiled model is cached), not once per request, so
+        // capturing `_currentUserService.TenantId` into a local first would bake
+        // whichever tenant happened to build the model first into every future query,
+        // for every user, permanently. Referencing the field itself lets EF Core
+        // re-evaluate it per query against this context instance.
+        modelBuilder.Entity<User>().HasQueryFilter(u => u.TenantId == _currentUserService.TenantId);
+        modelBuilder.Entity<Project>().HasQueryFilter(p => p.TenantId == _currentUserService.TenantId);
+        modelBuilder.Entity<TaskItem>().HasQueryFilter(t => t.TenantId == _currentUserService.TenantId);
+
         base.OnModelCreating(modelBuilder);
     }
 

@@ -22,9 +22,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasForeignKey(u => u.TenantId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Unique per tenant rather than globally — this simplified per-tenant
-        // User model (see Entities/User.cs) doesn't yet support one login
-        // shared across multiple tenants.
-        builder.HasIndex(u => new { u.TenantId, u.Email }).IsUnique();
+        // Globally unique (not per-tenant): login resolves a user by email alone,
+        // with no tenant-selection step in this simplified per-tenant User model
+        // (see Entities/User.cs), so email has to be unambiguous across all tenants.
+        builder.HasIndex(u => u.Email).IsUnique();
     }
 }

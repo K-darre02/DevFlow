@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DevFlow.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(DevFlowDbContext))]
-    [Migration("20260728025853_InitialCreate")]
+    [Migration("20260728032154_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -157,8 +157,10 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "Email")
+                    b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("Users");
                 });

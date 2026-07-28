@@ -130,10 +130,15 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                 columns: new[] { "TenantId", "ProjectId", "Status" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Users_TenantId_Email",
+                name: "IX_Users_Email",
                 table: "Users",
-                columns: new[] { "TenantId", "Email" },
+                column: "Email",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_TenantId",
+                table: "Users",
+                column: "TenantId");
         }
 
         /// <inheritdoc />
