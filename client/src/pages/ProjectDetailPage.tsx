@@ -36,7 +36,7 @@ export function ProjectDetailPage() {
                 : ['Could not load this project.']
           }
         />
-        <Link to="/" className="text-sm font-medium text-slate-900 underline">
+        <Link to="/projects" className="text-sm font-medium text-slate-900 underline">
           Back to projects
         </Link>
       </div>
@@ -48,7 +48,7 @@ export function ProjectDetailPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link to="/" className="text-sm text-slate-500 hover:text-slate-700">
+        <Link to="/projects" className="text-sm text-slate-500 hover:text-slate-700">
           ← Projects
         </Link>
         <div className="mt-1 flex items-center gap-3">

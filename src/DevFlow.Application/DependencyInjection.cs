@@ -1,6 +1,7 @@
 using System.Reflection;
 using DevFlow.Application.Activities;
 using DevFlow.Application.Attachments;
+using DevFlow.Application.Dashboard;
 using DevFlow.Application.Notifications;
 using DevFlow.Application.Projects;
 using DevFlow.Application.Tasks;
@@ -46,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IActivityLogService, ActivityLogService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IAttachmentService, AttachmentService>();
+        services.AddScoped<IDashboardService, DashboardService>();
 
         return services;
     }

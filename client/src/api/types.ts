@@ -196,3 +196,23 @@ export interface GetNotificationsParams {
 export interface UnreadCountResponse {
   count: number
 }
+
+export interface OverdueTask {
+  id: string
+  title: string
+  projectId: string
+  projectName: string
+  dueDate: string
+  priority: TaskPriority
+}
+
+export interface DashboardSummary {
+  projectCount: number
+  taskCount: number
+  completedTaskCount: number
+  overdueTaskCount: number
+  tasksByStatus: Partial<Record<TaskItemStatus, number>>
+  tasksByPriority: Partial<Record<TaskPriority, number>>
+  recentActivity: Activity[]
+  overdueTasks: OverdueTask[]
+}

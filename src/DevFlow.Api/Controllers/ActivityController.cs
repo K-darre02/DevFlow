@@ -46,14 +46,5 @@ public class ActivityController : ControllerBase
             result.PageSize));
     }
 
-    private static ActivityResponse ToResponse(ActivityLog activity) => new(
-        activity.Id,
-        activity.ActivityType,
-        activity.EntityType,
-        activity.EntityId,
-        activity.Description,
-        activity.Metadata,
-        activity.UserId,
-        activity.User?.Email,
-        activity.CreatedAt);
+    private static ActivityResponse ToResponse(ActivityLog activity) => ActivityResponseMapper.ToResponse(activity);
 }

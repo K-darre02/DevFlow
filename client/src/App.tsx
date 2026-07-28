@@ -9,6 +9,7 @@ import { TeamPage } from './pages/TeamPage'
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { NotificationsPage } from './pages/NotificationsPage'
+import { DashboardPage } from './pages/DashboardPage'
 
 function App() {
   return (
@@ -26,7 +27,8 @@ function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<ProjectsPage />} />
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/team" element={<TeamPage />} />
           <Route path="/activity" element={<ActivityPage />} />

@@ -18,6 +18,12 @@ export function AppLayout() {
             <Link to="/" className="text-lg font-semibold text-slate-900">
               DevFlow
             </Link>
+            <Link to="/" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+              Dashboard
+            </Link>
+            <Link to="/projects" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+              Projects
+            </Link>
             <Link to="/team" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Team
             </Link>
