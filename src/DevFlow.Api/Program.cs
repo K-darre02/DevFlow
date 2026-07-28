@@ -1,6 +1,7 @@
 using DevFlow.Api;
 using DevFlow.Application;
 using DevFlow.Infrastructure;
+using Microsoft.Extensions.Hosting;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -38,6 +39,12 @@ try
     app.MapHealthChecks("/health");
 
     app.Run();
+}
+catch (HostAbortedException)
+{
+    // Thrown by EF Core design-time tooling (e.g. `dotnet ef migrations add`),
+    // which builds the host far enough to extract the DbContext, then aborts
+    // it deliberately without running the app. Not a real failure.
 }
 catch (Exception ex)
 {

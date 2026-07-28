@@ -1,13 +1,14 @@
 services:
-  sql:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+  postgres:
+    image: postgres:16
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${DEV_DB_PASSWORD}"
+      POSTGRES_USER: devflow
+      POSTGRES_PASSWORD: "${DEV_DB_PASSWORD}"
+      POSTGRES_DB: devflow
     ports:
-      - "1433:1433"
+      - "5432:5432"
     volumes:
-      - devflow-sql-data:/var/opt/mssql
+      - devflow-postgres-data:/var/lib/postgresql/data
 
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite
@@ -21,4 +22,4 @@ services:
       - "8025:8025" # web UI
 
 volumes:
-  devflow-sql-data:
+  devflow-postgres-data:

@@ -12,7 +12,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddDbContext<DevFlowDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("DevFlowDatabase")));
+            options.UseNpgsql(configuration.GetConnectionString("DevFlowDatabase")));
 
         return services;
     }

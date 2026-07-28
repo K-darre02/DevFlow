@@ -1,0 +1,41 @@
+using DevFlow.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace DevFlow.Infrastructure.Persistence.Configurations;
+
+public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
+{
+    public void Configure(EntityTypeBuilder<TaskItem> builder)
+    {
+        builder.HasKey(t => t.Id);
+
+        builder.Property(t => t.Title)
+            .IsRequired()
+            .HasMaxLength(500);
+
+        builder.HasOne(t => t.Project)
+            .WithMany(p => p.TaskItems)
+            .HasForeignKey(t => t.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Restrict (not Cascade) here: TaskItems are already cleaned up
+        // transitively when their Project is deleted (Tenant -> Project ->
+        // TaskItem, both Cascade above). A second Cascade path direct from
+        // Tenant would be redundant and, on some providers, invalid.
+        builder.HasOne(t => t.Tenant)
+            .WithMany()
+            .HasForeignKey(t => t.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(t => t.AssigneeUser)
+            .WithMany()
+            .HasForeignKey(t => t.AssigneeUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Property(t => t.RowVersion).IsRowVersion();
+
+        // Serves the board query directly: tasks for a project, filtered/grouped by status.
+        builder.HasIndex(t => new { t.TenantId, t.ProjectId, t.Status });
+    }
+}
