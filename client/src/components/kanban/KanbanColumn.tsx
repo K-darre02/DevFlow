@@ -21,10 +21,10 @@ export function KanbanColumn({ status, label, tasks, onTaskClick }: KanbanColumn
     >
       <div className="flex items-center justify-between px-1">
         <h3 className="text-sm font-semibold text-slate-700">{label}</h3>
-        <span className="text-xs text-slate-400">{tasks.length}</span>
+        <span className="text-xs text-slate-500">{tasks.length}</span>
       </div>
 
-      {tasks.length === 0 && <p className="px-1 text-xs text-slate-400">No tasks</p>}
+      {tasks.length === 0 && <p className="px-1 text-xs text-slate-500">No tasks</p>}
 
       {tasks.map((task) => (
         <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />

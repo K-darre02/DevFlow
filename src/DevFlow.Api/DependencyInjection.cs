@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using DevFlow.Api.Middleware;
 using DevFlow.Api.Services;
 using DevFlow.Api.Storage;
@@ -13,6 +14,7 @@ using DevFlow.Infrastructure.Storage;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -29,6 +31,12 @@ public static class DependencyInjection
     // default port — this policy covers that second flow.
     public const string DevFrontendCorsPolicy = "DevFrontend";
 
+    // Applied to AuthController (register/login) — the credential-stuffing/
+    // account-enumeration surface docs/devflow/04-security.md §7 calls out.
+    // Not applied more broadly: every other endpoint already requires a
+    // valid JWT, which is a much stronger throttle than an IP-keyed limiter.
+    public const string AuthRateLimitPolicy = "Auth";
+
     public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddCors(options =>
@@ -37,6 +45,26 @@ public static class DependencyInjection
                 .WithOrigins("http://localhost:5173", "http://localhost:5284", "https://localhost:7061")
                 .AllowAnyHeader()
                 .AllowAnyMethod());
+        });
+
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            // Partitioned per client IP, not one global window — a single
+            // busy legitimate client shouldn't exhaust the limit for
+            // everyone else. 10 requests/minute is generous for a real
+            // login/register flow (including typos) but blunt for a
+            // scripted credential-stuffing attempt.
+            options.AddPolicy(AuthRateLimitPolicy, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
         });
 
         services.AddControllers()

@@ -12,6 +12,7 @@ public record CreateTaskRequest
     [MaxLength(500)]
     public string Title { get; init; } = string.Empty;
 
+    [MaxLength(4000)]
     public string? Description { get; init; }
 
     public TaskPriority Priority { get; init; } = TaskPriority.Medium;

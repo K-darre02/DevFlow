@@ -20,4 +20,10 @@ public class TenantMember : BaseEntity, ITenantOwned
     public User User { get; set; } = null!;
 
     public TenantRole Role { get; set; }
+
+    // See ActivityLog.CreatedAtTicks for why this exists — same SQLite
+    // ORDER BY-on-DateTimeOffset limitation (AuthController.Login orders a
+    // user's memberships by CreatedAt to pick the earliest-joined tenant),
+    // same fix.
+    public long CreatedAtTicks { get; set; }
 }

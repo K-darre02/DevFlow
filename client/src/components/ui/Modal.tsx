@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 interface ModalProps {
@@ -8,13 +8,56 @@ interface ModalProps {
   children: ReactNode
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const triggerElementRef = useRef<Element | null>(null)
+
+  // Moves focus into the dialog on open and back to whatever triggered it
+  // on close — without this, a keyboard user's focus silently stays on (or
+  // near) a button that's no longer visible/relevant once the modal closes.
+  useEffect(() => {
+    if (!isOpen) return
+
+    triggerElementRef.current = document.activeElement
+    const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    firstFocusable?.focus()
+
+    return () => {
+      if (triggerElementRef.current instanceof HTMLElement) {
+        triggerElementRef.current.focus()
+      }
+    }
+  }, [isOpen])
+
   useEffect(() => {
     if (!isOpen) return
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         onClose()
+        return
+      }
+
+      // Traps Tab/Shift+Tab within the dialog — without this, tabbing past
+      // the last focusable element moves focus to the page behind the
+      // overlay instead of wrapping back to the first one.
+      if (event.key === 'Tab' && dialogRef.current) {
+        const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+        if (focusable.length === 0) return
+
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
       }
     }
 
@@ -34,6 +77,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
         aria-hidden="true"
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}

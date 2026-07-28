@@ -14,6 +14,12 @@ public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .IsRequired()
             .HasMaxLength(500);
 
+        // Matches CreateTaskRequest/UpdateTaskRequest's [MaxLength(4000)] —
+        // defense-in-depth the same way Title's bound is, in case a caller
+        // ever reaches this column some way other than those two DTOs.
+        builder.Property(t => t.Description)
+            .HasMaxLength(4000);
+
         builder.HasOne(t => t.Project)
             .WithMany(p => p.TaskItems)
             .HasForeignKey(t => t.ProjectId)

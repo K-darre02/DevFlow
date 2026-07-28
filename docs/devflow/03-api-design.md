@@ -1,113 +1,111 @@
 # API Design
 
+*As-built. Several conventions in an earlier draft of this document — versioning, cursor pagination, an `Idempotency-Key` header, RFC 7807 `type`/`errors` on every response — were simplified or dropped during implementation; corrected below rather than left describing a contract that doesn't exist.*
+
 ## 1. Conventions
 
-- **Versioning**: all routes namespaced `/api/v1/...`. Breaking changes ship as `/api/v2/...` rather than mutating v1 in place.
-- **Origin**: the SPA and API are served from the same origin — Azure Static Web Apps proxies `/api/*` to the API as a linked backend, so the browser never makes a cross-origin call to reach it. This is what makes the auth model in §Auth below actually work; see [Architecture §2](01-architecture.md#2-component-diagram) and [Security §4](04-security.md#4-authentication) for why that matters.
-- **Auth**: `Authorization: Bearer <jwt>` on every request except `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`, and invite-accept. The JWT carries `sub` (user ID), `tenant_id`, and `role` claims. The refresh token travels in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie — safe to rely on here specifically because same-origin (above) means the cookie is always same-site.
-- **Tenant scope**: the active tenant is derived entirely from the JWT's `tenant_id` claim — never from a client-supplied header, query param, or route segment. A client cannot ask the API to act on a tenant it isn't currently authenticated into.
-- **Resource naming**: plural nouns, nested under their parent where ownership is fixed (`/tenants/current/members`), flat where a resource is queried independently of its parent (`/tasks?projectId=...`).
-- **Pagination**: cursor-based (`?cursor=<opaque>&limit=50`) on all list endpoints, response includes `nextCursor: string | null`. Chosen over offset pagination because task/notification lists are written to concurrently — offset pagination skips/duplicates rows under concurrent inserts, cursor pagination doesn't.
-- **Error format**: [RFC 7807](https://www.rfc-editor.org/rfc/rfc7807) `application/problem+json` — `{ type, title, status, detail, errors? }`, with `errors` populated for validation failures (field → message[]).
-- **Idempotency**: mutating endpoints that can be safely retried (e.g. invite creation) accept an optional `Idempotency-Key` header; the server deduplicates on that key for 24h.
-- **Optimistic concurrency**: endpoints that mutate a versioned resource (`PATCH /tasks/{id}`) require an `If-Match: "<rowVersion>"` header; a stale version returns `409 Conflict` with the current resource state in the body. Rationale in [Engineering Challenges §2](06-engineering-challenges.md).
+- **Versioning**: none. Routes are `/api/projects`, `/api/tasks`, etc. — no `/v1/` prefix. Simplified away during implementation; a real `v2` would be introduced only once a breaking change actually needed one.
+- **Origin**: the SPA and API are served from the same origin — Azure Static Web Apps proxies `/api/*` and `/hubs/*` to the API as a linked backend, so the browser never makes a cross-origin call to reach either. See [Architecture §2](01-architecture.md#2-component-diagram).
+- **Auth**: `Authorization: Bearer <jwt>` on every request except `POST /auth/register`, `POST /auth/login`, and `POST /team/invitations/accept`. The JWT carries `sub` (user ID), `tenant_id`, and `role` claims and expires in 15 minutes. There is no refresh token and no `/auth/logout` — see the revision note in [Architecture §4](01-architecture.md#4-authentication--tenant-isolation). A request with an expired or missing token gets `401`; the SPA responds by clearing local session state and redirecting to `/login`.
+- **Tenant scope**: the active tenant is derived entirely from the JWT's `tenant_id` claim — never from a client-supplied header, query param, or route segment.
+- **Resource naming**: plural nouns, flat (`/tasks?projectId=...`), except where an action doesn't map to a CRUD verb (`/team/invitations/accept`, `/tasks/{id}/attachments/{attachmentId}/download`).
+- **Pagination**: page-based (`?page=&pageSize=`), not cursor-based — used by `GET /activity`, `GET /notifications`, and `GET /search`. Response shape is `{ items, totalCount, page, pageSize }`. `page`/`pageSize` are clamped server-side to `page >= 1` and `pageSize` in `[1, 100]` regardless of what's passed. `GET /projects` and `GET /tasks` are **not** paginated — they return every matching row; both are expected to stay small at this system's scale (a tenant's project count, or a single project's task count), and `GET /tasks?projectId=` specifically needs "all tasks in this project" in one response to render the Kanban board.
+- **Error format**: ASP.NET Core `ProblemDetails` (`application/problem+json`) — `{ status, title, detail }`, with a `ValidationProblemDetails` shape (`errors: { field: string[] }`) for `400`s from FluentValidation or model-binding failures.
+- **Idempotency**: no `Idempotency-Key` support — a retried mutating request (e.g. a double-submitted invite) is not deduplicated server-side.
+- **Optimistic concurrency**: `PATCH /tasks/{id}` requires an `If-Match: "<version>"` header, where `<version>` is `TaskItem.Version` from a prior `GET`. A stale version returns `409 Conflict` with the current resource state under `current` in the body. Rationale in [Engineering Challenges §2](06-engineering-challenges.md).
 
 ## 2. Resource Endpoints
 
-### Auth
+### Auth (`AllowAnonymous`)
 | Method | Route | Notes |
 |---|---|---|
-| POST | `/auth/register` | Creates `User` + `Tenant` + `Owner` membership atomically |
-| POST | `/auth/login` | Returns access token in the response body + refresh token as a same-origin `HttpOnly` cookie |
-| POST | `/auth/refresh` | Rotates refresh token, issues new access token |
-| POST | `/auth/logout` | Revokes the presented refresh token, clears the cookie |
+| POST | `/auth/register` | Creates `Tenant` + `User` + `Owner` `TenantMember`, atomically. Returns an access token. |
+| POST | `/auth/login` | Returns an access token for the caller's earliest-joined tenant membership (no tenant-picker UI exists — see `AuthController.Login`'s own comment) |
 
-### Tenants & Membership
-| Method | Route | Notes |
-|---|---|---|
-| GET | `/tenants/current` | Active tenant details |
-| PATCH | `/tenants/current` | Owner-only: rename/settings |
-| GET | `/tenants/current/members` | List members + roles |
-| PATCH | `/tenants/current/members/{userId}` | Change role; rejected if it would leave zero Owners |
-| DELETE | `/tenants/current/members/{userId}` | Remove member, revoke their refresh tokens for this tenant |
-| POST | `/tenants/current/invites` | Create pending invite |
-| POST | `/invites/{token}/accept` | Public (token-authenticated) — converts invite to active membership |
+Both are rate-limited per client IP (10 requests/minute) — see [Security §7](04-security.md#7-rate-limiting--abuse-prevention).
 
-### Projects & Tasks
+### Team (`/team`)
+| Method | Route | Authorization | Notes |
+|---|---|---|---|
+| GET | `/team` | Any tenant member | List members + roles |
+| POST | `/team/invitations` | Admin or Owner | Creates a pending invitation; returns the raw token in the response body (no email delivery — see the revision note in [Architecture §6](01-architecture.md#6-background-processing)) |
+| POST | `/team/invitations/accept` | Anonymous, token-authenticated | Converts a pending invitation into an active membership + returns a scoped access token |
+| PATCH | `/team/{memberId}/role` | Owner only | Change a member's role; rejected if it would leave zero Owners |
+| DELETE | `/team/{memberId}` | Admin or Owner | Remove a member (an Admin may not remove an Owner — enforced at the service level via `ForbiddenException`, not a static policy, since it depends on the target member's role) |
+
+### Projects (`/projects`)
 | Method | Route | Notes |
 |---|---|---|
-| GET | `/projects` | List non-archived projects in the active tenant |
+| GET | `/projects?includeArchived=` | List projects in the active tenant |
+| GET | `/projects/{id}` | Single project; cross-tenant IDs return `404`, not `403` |
 | POST | `/projects` | Create project |
-| PATCH | `/projects/{id}` | Update, including `isArchived` |
-| GET | `/projects/{id}/board` | The project's tasks grouped by `Status` — a computed view, not a separate stored resource ([Database Design](02-database-design.md#table-notes)) |
+| PATCH | `/projects/{id}` | Update `name`/`isArchived` |
+| DELETE | `/projects/{id}` | Cascades to the project's `TaskItems` at the database level |
 
-### Tasks
+### Tasks (`/tasks`)
 | Method | Route | Notes |
 |---|---|---|
-| GET | `/tasks?projectId=&status=&assigneeId=&tag=&q=` | Filtered/searched list, cursor-paginated |
+| GET | `/tasks?projectId=&status=&assigneeUserId=` | Filtered list — this is what the frontend groups by `Status` client-side to render a project's board |
 | POST | `/tasks` | Create task |
-| GET | `/tasks/{id}` | Full task detail, including comments/attachments/activity |
-| PATCH | `/tasks/{id}` | Update fields; status changes go through this endpoint with `If-Match` |
-| POST | `/tasks/{id}/comments` | Add comment; server parses `@mentions` and creates notifications |
-| POST | `/tasks/{id}/attachments` | Multipart upload → Blob Storage under a generated object key; returns attachment metadata (no public URL) |
-| GET | `/tasks/{id}/attachments/{attachmentId}/download` | Authorizes the request, then issues a `302` redirect to a short-lived (5 min) read-only SAS URL — see [Security §5](04-security.md#5-input-validation--injection-defense) and [Engineering Challenges §7](06-engineering-challenges.md) |
-| GET | `/tasks/{id}/activity` | Chronological activity log for the task |
+| GET | `/tasks/{id}` | Single task |
+| PATCH | `/tasks/{id}` | Requires `If-Match` (§1) — status changes go through this same endpoint |
+| DELETE | `/tasks/{id}` | |
+| GET/POST | `/tasks/{taskId}/attachments` | List / upload (multipart) attachments — see [§5](#5-example-attachment-download) |
+| GET | `/tasks/{taskId}/attachments/{attachmentId}/download` | `302` redirect to a short-lived SAS URL |
+| DELETE | `/tasks/{taskId}/attachments/{attachmentId}` | |
 
-### Notifications
+### Activity, Notifications, Dashboard, Search
 | Method | Route | Notes |
 |---|---|---|
-| GET | `/notifications?unreadOnly=` | Cursor-paginated |
-| PATCH | `/notifications/{id}` | Mark read |
-| PATCH | `/notifications/read-all` | Bulk mark-read |
-
-### Dashboard
-| Method | Route | Notes |
-|---|---|---|
-| GET | `/projects/{id}/dashboard` | Task counts by status |
-| GET | `/projects/{id}/burndown?days=30` | Burndown series |
+| GET | `/activity?page=&pageSize=&entityType=&userId=&activityType=` | Paginated, newest first |
+| GET | `/notifications?page=&pageSize=&unreadOnly=` | Paginated; scoped to the caller (`TenantId` **and** `UserId`) |
+| GET | `/notifications/unread-count` | |
+| PATCH | `/notifications/{id}/read` / `/notifications/read-all` | |
+| GET | `/dashboard` | Tenant-wide counts, tasks-by-status/priority, recent activity, overdue tasks — not per-project |
+| GET | `/search?q=&page=&pageSize=` | Grouped results across Projects/Tasks/People — see [§6](#6-example-global-search) |
 
 ## 3. Example: Task Creation
 
 ```http
-POST /api/v1/tasks
+POST /api/tasks
 Authorization: Bearer eyJhbGciOi...
 Content-Type: application/json
 
 {
   "projectId": "3f1a...",
-  "title": "Wire up SignalR board group",
-  "description": "Broadcast task updates to project-scoped groups only.",
+  "title": "Wire up SignalR reconnection handling",
+  "description": "Auto-reconnect after a temporary connection loss.",
   "assigneeUserId": "9c2b...",
-  "dueDate": "2026-08-15",
-  "tags": ["backend", "realtime"]
+  "priority": "High",
+  "dueDate": "2026-08-15"
 }
 ```
 
 ```http
 201 Created
-Location: /api/v1/tasks/7e4d...
-ETag: "AAAAAAAAB9E="
+Location: /api/tasks/7e4d...
 
 {
   "id": "7e4d...",
   "projectId": "3f1a...",
   "status": "Backlog",
-  "title": "Wire up SignalR board group",
+  "title": "Wire up SignalR reconnection handling",
+  "priority": "High",
   "assigneeUserId": "9c2b...",
   "dueDate": "2026-08-15",
-  "tags": ["backend", "realtime"],
+  "version": 1,
   "createdAt": "2026-07-28T10:15:00Z"
 }
 ```
 
-`status` is the string name of the `TaskStatus` enum (`Backlog | ToDo | InProgress | InReview | Done`), serialized as a string rather than its underlying `int` for readability — no lookup table behind it ([Database Design](02-database-design.md#table-notes)).
+`status`/`priority` are the string names of their enums (`Backlog | ToDo | InProgress | InReview | Done`, `Low | Medium | High | Urgent`), not their underlying `int` — no lookup table behind either ([Database Design](02-database-design.md#table-notes)).
 
 ## 4. Example: Status Change With Conflict Detection
 
 ```http
-PATCH /api/v1/tasks/7e4d...
+PATCH /api/tasks/7e4d...
 Authorization: Bearer eyJhbGciOi...
-If-Match: "AAAAAAAAB9E="
+If-Match: "1"
 Content-Type: application/json
 
 { "status": "InProgress" }
@@ -117,46 +115,63 @@ If another client already moved the same task (stale `If-Match`):
 
 ```http
 409 Conflict
-Content-Type: application/problem+json
+Content-Type: application/json
 
 {
-  "type": "https://devflow.dev/errors/conflict",
-  "title": "Task was modified by another user",
+  "title": "Task was modified by another request",
   "status": 409,
-  "detail": "The task's status has changed since it was last fetched.",
-  "current": { "id": "7e4d...", "status": "InReview", "rowVersion": "AAAAAAAAB9F=" }
+  "detail": "The task's data has changed since it was last fetched.",
+  "current": { "id": "7e4d...", "status": "InReview", "version": 2 }
 }
 ```
 
-The client reconciles by re-fetching and re-applying the drag if still valid — see [Engineering Challenges §2](06-engineering-challenges.md) for the full optimistic-update flow this supports.
+The client rolls the optimistic drag back, shows the real current state, and lets the user decide whether to reapply their change — see [Engineering Challenges §2](06-engineering-challenges.md) for the full flow this supports.
 
 ## 5. Example: Attachment Download
 
 ```http
-GET /api/v1/tasks/7e4d.../attachments/a1b2.../download
+GET /api/tasks/7e4d.../attachments/a1b2.../download
 Authorization: Bearer eyJhbGciOi...
 ```
 
 ```http
 302 Found
-Location: https://devflowstorage.blob.core.windows.net/attachments/<opaque-key>?sv=...&se=2026-07-28T10:20:00Z&sig=...
-Cache-Control: no-store
+Location: https://<storage-account>.blob.core.windows.net/task-attachments/<opaque-key>?sv=...&se=2026-07-28T10:20:00Z&sig=...
 ```
 
-The server validates that the requester's tenant/role can access this task before minting the SAS URL — the `BlobKey` alone (even if somehow guessed) is never sufficient, because Blob Storage isn't reachable without a valid, time-boxed signature the API controls. See [Engineering Challenges §7](06-engineering-challenges.md).
+The server validates tenant/task access before minting the SAS URL — the `BlobKey` alone (even if somehow guessed) is never sufficient, because Blob Storage isn't reachable without a valid, time-boxed signature the API controls. Locally (no Azure Storage account), the redirect target is `GET /api/blob-downloads?...&sig=...` instead — an intentionally anonymous endpoint whose only authorization is an HMAC signature in the URL itself (`SignedBlobUrl`), since a browser following a redirect can't attach an `Authorization` header. See [Engineering Challenges §7](06-engineering-challenges.md).
 
-## 6. Real-Time Surface (SignalR)
+## 6. Example: Global Search
 
-Not REST, but part of the API contract: clients viewing a board connect to `wss://<same-origin>/hubs/board?projectId={id}` (authenticated via the same JWT, passed as an access token query param per SignalR's connection negotiation; same-origin deployment means no additional CORS configuration is needed for the handshake). The server adds the connection to a SignalR group named `project:{projectId}`. Events pushed to the group:
+```http
+GET /api/search?q=voyager&pageSize=5
+Authorization: Bearer eyJhbGciOi...
+```
 
-| Event | Payload | Trigger |
+```http
+200 OK
+
+{
+  "projects": { "items": [{ "id": "...", "name": "Voyager Launch", "isArchived": false, "rank": 3 }], "totalCount": 1 },
+  "tasks": { "items": [{ "id": "...", "title": "Voyager checklist review", "projectId": "...", "projectName": "Voyager Launch", "status": "ToDo", "rank": 2 }], "totalCount": 1 },
+  "people": { "items": [], "totalCount": 0 }
+}
+```
+
+Each group is independently ranked and paginated. In production, ranking is PostgreSQL's `ts_rank` over `to_tsvector`/`plainto_tsquery`; against Sqlite (this project's test suite) it falls back to a prefix/substring heuristic — see [Technical Decisions §8](05-technical-decisions.md) and [Engineering Challenges §6](06-engineering-challenges.md). "People" search goes through `TenantMembers`, never the global `Users` table directly, so it can never return a user from another tenant.
+
+## 7. Real-Time Surface (SignalR)
+
+Not REST, but part of the API contract: `wss://<same-origin>/hubs/tasks`, authenticated via the same JWT (SignalR's JS client can't set an `Authorization` header on the WebSocket handshake, so the token travels as an `access_token` query string parameter instead — bridged onto the same JWT bearer handler, scoped to `/hubs` paths only). On connect, the server adds the connection to two groups: `tenant:{tenantId}` (all task/project events for the caller's tenant) and `user:{userId}` (notification events for the caller specifically).
+
+| Event | Group | Trigger |
 |---|---|---|
-| `task.updated` | `{ taskId, changes }` | Any successful task mutation |
-| `task.created` | `{ task }` | New task added to the project |
-| `task.deleted` | `{ taskId }` | Task removed |
+| `taskCreated` / `taskUpdated` / `taskMoved` / `taskDeleted` | `tenant:{tenantId}` | Task mutation, broadcast only after the write's transaction commits |
+| `projectCreated` / `projectArchived` | `tenant:{tenantId}` | Project mutation |
+| `notificationCreated` | `user:{userId}` | A notification was created for that specific user |
 
-Clients never receive events for boards they aren't currently viewing — group membership is scoped per project, not per tenant, to avoid needless fan-out (see [Engineering Challenges §3](06-engineering-challenges.md)).
+Fan-out is per-tenant, not per-project-board — every connected client for a tenant receives every task event for that tenant, filtered client-side to whatever board is currently open. The cost this accepts, and the trigger for narrowing it to per-project groups, is discussed in [Engineering Challenges §3](06-engineering-challenges.md).
 
-## 7. Authorization Enforcement
+## 8. Authorization Enforcement
 
-Every endpoint above declares a minimum role via an ASP.NET Core authorization policy (e.g. `[Authorize(Policy = "MemberOrAbove")]`). `Viewer` role is accepted on all `GET` routes and rejected on all mutating routes at the policy level — this is enforced identically regardless of what the frontend does, per [Security §3](04-security.md#3-authorization).
+Most endpoints require only a valid JWT (`[Authorize]`) — any authenticated member of the active tenant may read/write, since role hierarchy in this system is `Member < Admin < Owner` with no `Viewer` tier (an earlier draft of this document described a `Viewer` role; it was never built — see [Security §3](04-security.md#3-authorization)). The few endpoints that do gate by role use an ASP.NET Core authorization policy (`[Authorize(Policy = "OwnerOnly")]` / `"AdminOrOwner"`) — listed per-endpoint in [§2](#2-resource-endpoints) above. Rules that depend on the *specific* member being acted on (an Admin can't remove an Owner; a tenant can't be left with zero Owners) aren't expressible as a static policy and are enforced in `TeamService` instead, via `ForbiddenException`.

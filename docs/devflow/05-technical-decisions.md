@@ -32,11 +32,11 @@ Architecture Decision Record (ADR) format: Context → Decision → Alternatives
 
 **Context**: Need an auth mechanism for a SPA talking to a horizontally-scalable API.
 
-**Decision**: Short-lived JWT access tokens + rotated refresh tokens (detail in [Security §4](04-security.md#4-authentication)).
+**Decision**: Short-lived JWT access tokens (detail in [Security §4](04-security.md#4-authentication)).
 
 **Alternatives considered**: Server-side session with a cookie + session store (e.g. Redis). Would centralize revocation (kill a session server-side, instantly) but adds a stateful dependency the API doesn't otherwise need, and complicates horizontal scaling (sticky sessions or a shared session store to keep in sync).
 
-**Consequences**: Revocation is harder with pure JWTs — solved here by keeping access tokens short-lived (15 min) and tracking refresh tokens server-side (hashed) so *those* remain revocable, getting most of the operational benefit of sessions without the stateful access-token dependency. This design still relies on a cookie for the refresh token, which only stays simple (`SameSite=Strict`, no CSRF token needed) because of the same-origin deployment decided in §6 below — a stateless JWT design and a same-origin deployment topology are a package deal here, not two independent choices.
+**Consequences**: Revocation is harder with pure JWTs — the intended mitigation was keeping access tokens short-lived (15 min) *and* tracking rotated refresh tokens server-side (hashed) so those remain revocable. Only the first half was actually built. **Revision note**: the refresh-token half of this decision — rotated refresh tokens, an `HttpOnly, SameSite=Strict` cookie, `/auth/refresh`/`/auth/logout` — was never implemented. As shipped, there is only a 15-minute access token with no renewal path; a session simply expires and the user re-authenticates. This is a real gap, not a documented tradeoff — see [Security §4](04-security.md#4-authentication) and the root [README](../../README.md#known-limitations). The same-origin deployment decided in §6 below remains correct/necessary regardless — it's what a future refresh-cookie implementation would depend on, and is unrelated to today's bearer-token-only flow working correctly.
 
 ## 4. EF Core global query filters as the tenant-isolation mechanism (not per-repository manual filtering)
 
@@ -52,13 +52,15 @@ Architecture Decision Record (ADR) format: Context → Decision → Alternatives
 
 **Context**: The board needs to reflect other users' changes without a manual refresh (real-time collaboration is a core product requirement).
 
-**Decision**: Azure SignalR Service, with per-project groups (detail in [API Design §6](03-api-design.md#6-real-time-surface-signalr)).
+**Decision**: Azure SignalR Service, with per-project groups (detail in [API Design §7](03-api-design.md#7-real-time-surface-signalr)).
 
 **Alternatives considered**:
 - *Short-polling*: simplest to implement, but either wastes requests at low activity or lags noticeably at a poll interval long enough to be efficient.
 - *Self-hosted WebSockets (raw `ConnectionMapping` in ASP.NET Core)*: works, but ties WebSocket connection state to a specific App Service instance, which fights horizontal autoscaling (a client's persistent connection would need to survive instance rebalancing).
 
 **Consequences**: Azure SignalR Service externalizes connection management, so the API layer stays stateless and scales independently of open WebSocket count. Adds an Azure-specific dependency (acceptable, given the whole stack targets Azure) and a service-tier ceiling — the Free tier caps concurrent connections and daily messages, which is fine for a portfolio demo but is a documented scaling limit, not an oversight; see [Quality Attributes §2](07-quality-attributes.md#2-scalability).
+
+**Revision note**: implemented as self-hosted ASP.NET Core SignalR (`app.MapHub<TaskHub>`) directly on the API's own App Service instance instead — no Azure SignalR Service resource exists. This accepts exactly the tradeoff named above as the reason to avoid self-hosting (WebSocket state tied to one instance) as a deliberate simplification for a single-instance deployment; groups are also scoped per-tenant, not per-project (`tenant:{tenantId}` + `user:{userId}` — see [API Design §7](03-api-design.md#7-real-time-surface-signalr)), broadcasting every tenant event to every connected client for that tenant rather than only to clients viewing the relevant board. Reintroducing Azure SignalR Service (for horizontal scale-out) and narrowing groups to per-project (to cut broadcast volume) are both additive changes if either ever becomes necessary — see [Engineering Challenges §3](06-engineering-challenges.md).
 
 ## 6. React SPA + separate API, deployed same-origin via a linked backend
 
@@ -87,19 +89,21 @@ Architecture Decision Record (ADR) format: Context → Decision → Alternatives
 
 ## 8. PostgreSQL Full-Text Search over a dedicated search service
 
-**Context**: Task search needs to cover title/description across a project.
+**Context**: Global search needs to cover Projects, Tasks, and (tenant) People by keyword.
 
-**Decision**: PostgreSQL's built-in full-text search (`tsvector`/`tsquery`, backed by a GIN index) directly on `TaskItems`, scoped by the same `(TenantId, ProjectId)` index used elsewhere.
+**Decision**: PostgreSQL's built-in full-text search (`tsvector`/`tsquery`), scoped by the same tenant query filter every other query goes through.
 
 **Alternatives considered**: A dedicated search service (Elasticsearch, Azure Cognitive Search) — better relevance tuning and scales further, but introduces a second system to keep in sync with the source of truth (indexing pipeline, eventual consistency) for a search surface that, at this system's expected data volume, doesn't need it.
 
 **Consequences**: One less moving part and no index-sync problem to solve. The explicit tradeoff — and the point at which this stops being sufficient — is discussed in [Engineering Challenges §6](06-engineering-challenges.md).
 
+**Revision note**: broader in scope than originally drafted here (Projects and tenant members too, not just `TaskItems`), behind a single `ISearchService` interface (`PostgresFullTextSearchService` in production; `LikeSearchService`, a portable `LIKE`-based substitute, is what actually runs in this project's Sqlite-backed test suite — Sqlite has no translation path for Postgres' full-text functions at all). Also not yet backed by a GIN index or a persisted `tsvector` column as originally specified — `to_tsvector`/`plainto_tsquery`/`ts_rank` run ad hoc per query via Npgsql's `EF.Functions`. Correct and a reasonable v1, but the documented next optimization step (a generated, indexed `tsvector` column) wasn't implemented, since this sandbox has no PostgreSQL instance to validate that migration against.
+
 ## 9. Board collapsed into Project — no separate `Board` entity
 
 **Context**: The original schema modeled `Board` as its own entity, one-to-many under `Project`, largely to give `TaskStatuses` something to be seeded per. Once §7 removed the per-board status table, `Board` had no remaining reason to exist as a distinct row: every project has exactly one board, and `TaskItems` already pointed at `ProjectId` directly.
 
-**Decision**: There is no `Boards` table. `GET /projects/{id}/board` ([API Design §2](03-api-design.md#2-resource-endpoints)) returns the project's tasks grouped by `Status` — a computed response shape, not a stored resource.
+**Decision**: There is no `Boards` table and no dedicated board endpoint. `GET /tasks?projectId=` ([API Design §2](03-api-design.md#2-resource-endpoints)) returns the project's tasks; the frontend groups them by `Status` client-side to render the board — a computed view, not a stored resource or a server-computed response shape.
 
 **Alternatives considered**: Keep `Board` as a 1:1 shadow table alongside `Project` for semantic clarity. Rejected — a 1:1 table that always exists in lockstep with its parent isn't modeling anything a nullable/embedded concept on `Project` couldn't, and it was only ever load-bearing for the now-removed per-board status configurability.
 

@@ -74,7 +74,13 @@ export function ActivityPage() {
             ))}
           </Select>
 
-          <Select label="User" value={userId} onChange={(event) => resetToFirstPage(setUserId)(event.target.value)}>
+          <Select
+            label="User"
+            value={userId}
+            disabled={teamQuery.isError}
+            error={teamQuery.isError ? 'Could not load members' : undefined}
+            onChange={(event) => resetToFirstPage(setUserId)(event.target.value)}
+          >
             <option value="">Everyone</option>
             {teamQuery.data?.map((member) => (
               <option key={member.userId} value={member.userId}>

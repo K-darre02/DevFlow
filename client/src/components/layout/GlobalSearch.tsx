@@ -12,7 +12,12 @@ function statusLabel(status: TaskSearchResult['status']): string {
   return STATUS_COLUMNS.find((column) => column.status === status)?.label ?? status
 }
 
-export function GlobalSearch() {
+interface GlobalSearchProps {
+  /** Overrides the default fixed w-64 — e.g. "w-full" in AppLayout's mobile menu, where a fixed width doesn't fit. */
+  className?: string
+}
+
+export function GlobalSearch({ className = 'w-64' }: GlobalSearchProps) {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
@@ -94,7 +99,7 @@ export function GlobalSearch() {
   const showDropdown = isOpen && debouncedQuery.length > 0
 
   return (
-    <div className="relative w-64" ref={containerRef}>
+    <div className={`relative ${className}`} ref={containerRef}>
       <div className="relative">
         <svg
           viewBox="0 0 24 24"
@@ -118,7 +123,7 @@ export function GlobalSearch() {
           className="w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:outline-none"
         />
         {!query && (
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-slate-200 px-1 text-[10px] font-medium text-slate-400">
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-slate-200 px-1 text-[10px] font-medium text-slate-500">
             ⌘K
           </span>
         )}
@@ -138,7 +143,7 @@ export function GlobalSearch() {
 
           {results && results.projects.items.length > 0 && (
             <div className="border-b border-slate-100 py-2">
-              <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Projects</p>
+              <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Projects</p>
               {results.projects.items.map((project) => (
                 <button
                   key={project.id}
@@ -147,7 +152,7 @@ export function GlobalSearch() {
                   className="block w-full px-4 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
                 >
                   {project.name}
-                  {project.isArchived && <span className="ml-2 text-xs text-slate-400">Archived</span>}
+                  {project.isArchived && <span className="ml-2 text-xs text-slate-500">Archived</span>}
                 </button>
               ))}
             </div>
@@ -155,7 +160,7 @@ export function GlobalSearch() {
 
           {results && results.tasks.items.length > 0 && (
             <div className="border-b border-slate-100 py-2">
-              <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Tasks</p>
+              <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Tasks</p>
               {results.tasks.items.map((task) => (
                 <button
                   key={task.id}
@@ -164,7 +169,7 @@ export function GlobalSearch() {
                   className="block w-full px-4 py-2 text-left hover:bg-slate-50"
                 >
                   <span className="block truncate text-sm text-slate-900">{task.title}</span>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-500">
                     {task.projectName} · {statusLabel(task.status)}
                   </span>
                 </button>
@@ -174,7 +179,7 @@ export function GlobalSearch() {
 
           {results && results.users.items.length > 0 && (
             <div className="py-2">
-              <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">People</p>
+              <p className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">People</p>
               {results.users.items.map((user) => (
                 <button
                   key={user.userId}
@@ -183,7 +188,7 @@ export function GlobalSearch() {
                   className="block w-full px-4 py-2 text-left hover:bg-slate-50"
                 >
                   <span className="block truncate text-sm text-slate-900">{user.email}</span>
-                  <span className="text-xs text-slate-400">{user.role}</span>
+                  <span className="text-xs text-slate-500">{user.role}</span>
                 </button>
               ))}
             </div>

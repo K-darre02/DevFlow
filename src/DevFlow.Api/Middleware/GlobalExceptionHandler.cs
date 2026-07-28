@@ -31,12 +31,12 @@ public class GlobalExceptionHandler : IExceptionHandler
                 Title = "Resource not found",
                 Detail = notFound.Message
             },
-            ForbiddenException forbidden => new ProblemDetails
+            ForbiddenException forbidden => LogAndReturn(forbidden, new ProblemDetails
             {
                 Status = StatusCodes.Status403Forbidden,
                 Title = "This action is not allowed",
                 Detail = forbidden.Message
-            },
+            }),
             ValidationException validationException => new ValidationProblemDetails(
                 validationException.Errors
                     .GroupBy(e => e.PropertyName)
@@ -61,5 +61,16 @@ public class GlobalExceptionHandler : IExceptionHandler
         // has) would silently be dropped from every validation response.
         await httpContext.Response.WriteAsJsonAsync(problemDetails, problemDetails.GetType(), cancellationToken);
         return true;
+    }
+
+    // A 403 here means the caller passed their [Authorize] policy but
+    // failed a data-dependent domain rule (see ForbiddenException's own
+    // doc comment) — worth a Warning-level record the way a failed login
+    // is (AuthController.Login), since both are signals worth alerting on
+    // an anomalous rate of, not just a routine 4xx.
+    private ProblemDetails LogAndReturn(ForbiddenException exception, ProblemDetails problemDetails)
+    {
+        _logger.LogWarning(exception, "Authorization denied: {Message}", exception.Message);
+        return problemDetails;
     }
 }

@@ -121,6 +121,14 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
             }
         }
 
+        foreach (var entry in ChangeTracker.Entries<TenantMember>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAtTicks = now.Ticks;
+            }
+        }
+
         return base.SaveChangesAsync(cancellationToken);
     }
 }

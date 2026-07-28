@@ -6,6 +6,7 @@ using DevFlow.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevFlow.Api.Controllers;
@@ -13,17 +14,24 @@ namespace DevFlow.Api.Controllers;
 [ApiController]
 [Route("api/auth")]
 [AllowAnonymous]
+[EnableRateLimiting(DependencyInjection.AuthRateLimitPolicy)]
 public class AuthController : ControllerBase
 {
     private readonly DevFlowDbContext _dbContext;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly JwtTokenService _tokenService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(DevFlowDbContext dbContext, IPasswordHasher<User> passwordHasher, JwtTokenService tokenService)
+    public AuthController(
+        DevFlowDbContext dbContext,
+        IPasswordHasher<User> passwordHasher,
+        JwtTokenService tokenService,
+        ILogger<AuthController> logger)
     {
         _dbContext = dbContext;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
+        _logger = logger;
     }
 
     // Creates a new Tenant, its first User, and a TenantMember(Owner) linking
@@ -87,6 +95,7 @@ public class AuthController : ControllerBase
 
         if (user is null)
         {
+            _logger.LogWarning("Login failed for {Email}: no account with this email.", request.Email);
             return Unauthorized("Invalid email or password.");
         }
 
@@ -94,6 +103,7 @@ public class AuthController : ControllerBase
 
         if (verification == PasswordVerificationResult.Failed)
         {
+            _logger.LogWarning("Login failed for {Email}: incorrect password.", request.Email);
             return Unauthorized("Invalid email or password.");
         }
 
@@ -109,10 +119,14 @@ public class AuthController : ControllerBase
         // simplification, not an oversight; a real multi-tenant switcher is
         // a separate feature. IgnoreQueryFilters: no tenant context exists
         // yet, discovering one is the point of this query.
+        // Orders by CreatedAtTicks, not CreatedAt directly — see
+        // TenantMember.CreatedAtTicks (SQLite can't translate ORDER BY on a
+        // DateTimeOffset column; same fix already applied to
+        // ActivityLog/Notification).
         var membership = await _dbContext.TenantMembers
             .IgnoreQueryFilters()
             .Where(m => m.UserId == user.Id)
-            .OrderBy(m => m.CreatedAt)
+            .OrderBy(m => m.CreatedAtTicks)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (membership is null)

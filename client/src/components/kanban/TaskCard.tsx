@@ -39,10 +39,31 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       onClick={onClick}
       {...listeners}
       {...attributes}
-      className={`cursor-pointer touch-none rounded-md border border-slate-200 bg-white p-3 shadow-sm
+      className={`relative cursor-pointer touch-none rounded-md border border-slate-200 bg-white p-3 shadow-sm
         transition-opacity hover:border-slate-300 ${isDragging ? 'opacity-50' : ''}`}
     >
-      <p className="text-sm font-medium text-slate-900">{task.title}</p>
+      {/* dnd-kit's KeyboardSensor claims Space/Enter on this card for
+          drag pickup/drop, so a keyboard user tabbing here has no way to
+          open the task the way a mouse click does. This button is a
+          separate, independently-focusable element (stopPropagation keeps
+          its own key/click events from also triggering the outer card's
+          drag listeners) that gives keyboard users an equivalent path. */}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick()
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+        aria-label={`Open ${task.title}`}
+        className="absolute right-1.5 top-1.5 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 20h4l10.5-10.5a2.121 2.121 0 0 0-3-3L5 17v3Z" />
+        </svg>
+      </button>
+
+      <p className="pr-6 text-sm font-medium text-slate-900">{task.title}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge color={PRIORITY_BADGE_COLOR[task.priority]}>{task.priority}</Badge>
         {due && (

@@ -113,7 +113,7 @@ export function DashboardPage() {
                 />
                 <div>
                   <p className="text-sm text-slate-900">{activity.description}</p>
-                  <p className="text-xs text-slate-400">{new Date(activity.createdAt).toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{new Date(activity.createdAt).toLocaleString()}</p>
                 </div>
               </li>
             ))}

@@ -93,7 +93,7 @@ export function TaskAttachments({ taskId }: TaskAttachmentsProps) {
 
       {attachmentsQuery.isLoading && <Spinner label="Loading attachments…" />}
 
-      {attachmentsQuery.data?.length === 0 && <p className="text-xs text-slate-400">No attachments yet.</p>}
+      {attachmentsQuery.data?.length === 0 && <p className="text-xs text-slate-500">No attachments yet.</p>}
 
       {attachmentsQuery.data && attachmentsQuery.data.length > 0 && (
         <ul className="flex flex-col gap-1.5">
@@ -104,27 +104,29 @@ export function TaskAttachments({ taskId }: TaskAttachmentsProps) {
             >
               <div className="min-w-0">
                 <p className="truncate text-sm text-slate-900">{attachment.fileName}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   {formatFileSize(attachment.size)} · {attachment.uploadedByEmail ?? 'Unknown'}
                 </p>
               </div>
               <div className="flex flex-shrink-0 items-center gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  className="text-xs"
                   onClick={() => void handleDownload(attachment)}
                   disabled={downloadingId === attachment.id}
-                  className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50"
                 >
                   {downloadingId === attachment.id ? 'Downloading…' : 'Download'}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="link-danger"
+                  className="text-xs"
                   onClick={() => deleteMutation.mutate(attachment.id)}
                   disabled={deleteMutation.isPending && deleteMutation.variables === attachment.id}
-                  className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50"
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             </li>
           ))}

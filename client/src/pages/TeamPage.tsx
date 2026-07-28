@@ -145,7 +145,9 @@ export function TeamPage() {
           />
         )}
 
-        {teamQuery.data && (
+        {teamQuery.data?.length === 0 && <p className="text-sm text-slate-500">No team members yet.</p>}
+
+        {teamQuery.data && teamQuery.data.length > 0 && (
           <ul className="divide-y divide-slate-200">
             {teamQuery.data.map((member) => (
               <li key={member.id} className="flex items-center justify-between gap-4 py-3">
@@ -160,22 +162,23 @@ export function TeamPage() {
                   </span>
 
                   {canChangeRoles && (
-                    <select
-                      aria-label={`Role for ${member.email}`}
-                      value={member.role}
-                      disabled={changeRoleMutation.isPending}
-                      onChange={(event) =>
-                        changeRoleMutation.mutate({ memberId: member.id, role: event.target.value as TenantRole })
-                      }
-                      className="rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900 shadow-sm
-                        focus:outline-none focus:ring-2 focus:ring-slate-900/20"
-                    >
-                      {ASSIGNABLE_ROLES.map((role) => (
-                        <option key={role} value={role}>
-                          {role}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="w-28">
+                      <Select
+                        label={`Role for ${member.email}`}
+                        hideLabel
+                        value={member.role}
+                        disabled={changeRoleMutation.isPending}
+                        onChange={(event) =>
+                          changeRoleMutation.mutate({ memberId: member.id, role: event.target.value as TenantRole })
+                        }
+                      >
+                        {ASSIGNABLE_ROLES.map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
                   )}
 
                   {canManageTeam && (

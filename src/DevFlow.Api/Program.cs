@@ -51,6 +51,10 @@ try
     builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
+        // Required for the TraceIdentifier pushed by the middleware below
+        // to actually attach to log events written during request handling
+        // — without this, LogContext.PushProperty has nothing to enrich.
+        .Enrich.FromLogContext()
         .WriteTo.Console(),
         writeToProviders: true);
 
@@ -64,6 +68,29 @@ try
     var app = builder.Build();
 
     app.UseExceptionHandler();
+
+    // ASP.NET Core generates a TraceIdentifier per request regardless; this
+    // pushes it into Serilog's LogContext so every log statement written
+    // while handling this request — not just the one-line summary
+    // UseSerilogRequestLogging emits below — carries the same value, which
+    // is what actually lets a request's full log trail be reconstructed
+    // (see docs/devflow/07-quality-attributes.md §4).
+    app.Use(async (context, next) =>
+    {
+        using (Serilog.Context.LogContext.PushProperty("TraceIdentifier", context.TraceIdentifier))
+        {
+            await next();
+        }
+    });
+
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        {
+            diagnosticContext.Set("TraceIdentifier", httpContext.TraceIdentifier);
+            diagnosticContext.Set("TenantId", httpContext.User.FindFirst("tenant_id")?.Value);
+        };
+    });
 
     if (app.Environment.IsDevelopment())
     {
@@ -97,6 +124,7 @@ try
     app.UseHttpsRedirection();
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseRateLimiter();
 
     app.MapControllers();
     app.MapHealthChecks("/health");

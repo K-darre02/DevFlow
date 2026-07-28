@@ -213,9 +213,21 @@ docs/devflow/                # Full design documentation (PRD, architecture, sec
 
 ## Known limitations
 
-- No refresh-token rotation UI/flow beyond what's described in
+- **No refresh token.** `/auth/login`/`/auth/register` issue only a
+  15-minute JWT access token — no refresh token, no `/auth/logout`. A
+  session simply stops working after 15 minutes and the SPA redirects to
+  `/login`. An earlier design draft specified rotated refresh tokens in an
+  `HttpOnly` cookie; it was never built — see the revision note in
   [`docs/devflow/05-technical-decisions.md`](docs/devflow/05-technical-decisions.md)
   ADR 3.
+- **Three-tier role model, not four.** `TenantRole` is `Member | Admin |
+  Owner` — no `Viewer` role, despite one being described in an earlier
+  draft of [`docs/devflow/04-security.md`](docs/devflow/04-security.md).
+- **No email delivery.** Invitations return a raw token in the API
+  response for the inviter to share manually; there's no SendGrid
+  integration or background worker, despite both being described in an
+  earlier architecture draft — see the revision note in
+  [`docs/devflow/01-architecture.md`](docs/devflow/01-architecture.md) §6.
 - `AzureBlobStorageService` and `PostgresFullTextSearchService` (real
   Postgres `tsvector`/`ts_rank` full-text search) are not exercised by the
   automated test suite — both require a live Azure Storage account and a

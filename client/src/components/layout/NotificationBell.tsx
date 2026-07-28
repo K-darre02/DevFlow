@@ -98,20 +98,23 @@ export function NotificationBell() {
               <p className="px-4 py-6 text-center text-sm text-slate-500">No notifications yet.</p>
             )}
 
-            {recentQuery.data?.items.map((notification) => (
-              <button
-                key={notification.id}
-                type="button"
-                onClick={() => !notification.isRead && markReadMutation.mutate(notification.id)}
-                className={`block w-full border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-slate-50 ${
-                  notification.isRead ? '' : 'bg-blue-50/60'
-                }`}
-              >
-                <p className="text-sm font-medium text-slate-900">{notification.title}</p>
-                <p className="mt-0.5 text-xs text-slate-600">{notification.message}</p>
-                <p className="mt-1 text-xs text-slate-400">{new Date(notification.createdAt).toLocaleString()}</p>
-              </button>
-            ))}
+            <ul>
+              {recentQuery.data?.items.map((notification) => (
+                <li key={notification.id}>
+                  <button
+                    type="button"
+                    onClick={() => !notification.isRead && markReadMutation.mutate(notification.id)}
+                    className={`block w-full border-b border-slate-50 px-4 py-3 text-left last:border-0 hover:bg-slate-50 ${
+                      notification.isRead ? '' : 'bg-blue-50/60'
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-slate-900">{notification.title}</p>
+                    <p className="mt-0.5 text-xs text-slate-600">{notification.message}</p>
+                    <p className="mt-1 text-xs text-slate-500">{new Date(notification.createdAt).toLocaleString()}</p>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="border-t border-slate-100 px-4 py-2 text-center">

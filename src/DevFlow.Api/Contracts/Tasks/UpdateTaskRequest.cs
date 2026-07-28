@@ -11,6 +11,7 @@ public record UpdateTaskRequest
     [MaxLength(500)]
     public string? Title { get; init; }
 
+    [MaxLength(4000)]
     public string? Description { get; init; }
 
     public TaskItemStatus? Status { get; init; }
