@@ -1,12 +1,15 @@
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using DevFlow.Api.Middleware;
 using DevFlow.Api.Services;
+using DevFlow.Api.Storage;
 using DevFlow.Application.Common;
 using DevFlow.Domain.Entities;
 using DevFlow.Domain.Enums;
 using DevFlow.Infrastructure.Persistence;
+using DevFlow.Infrastructure.Storage;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -116,8 +119,45 @@ public static class DependencyInjection
         });
 
         AddJwtAuthentication(services, configuration);
+        AddBlobStorage(services, configuration);
 
         return services;
+    }
+
+    // Azure Blob Storage when Storage:Azure:ConnectionString is configured,
+    // the local-filesystem substitute otherwise — see
+    // docs/devflow/01-architecture.md §9 for the same local/cloud
+    // substitution pattern already used for SignalR.
+    private static void AddBlobStorage(IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<AzureBlobStorageOptions>(configuration.GetSection("Storage:Azure"));
+        services.Configure<LocalFileStorageOptions>(configuration.GetSection("Storage:Local"));
+
+        // Unlike Jwt:SigningKey (which fails fast if missing — a real
+        // deployment secret that must be deliberately set), local storage's
+        // signing key defaults to a fresh random value per process start
+        // when unconfigured: it only has to remain valid for this process's
+        // own short-lived download URLs, and requiring a manually-set
+        // secret just to try file uploads locally would be unnecessary
+        // friction for exactly the "local development" case this
+        // implementation exists for.
+        services.PostConfigure<LocalFileStorageOptions>(options =>
+        {
+            if (string.IsNullOrEmpty(options.SigningKey))
+            {
+                options.SigningKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            }
+        });
+
+        var azureConnectionString = configuration["Storage:Azure:ConnectionString"];
+        if (!string.IsNullOrWhiteSpace(azureConnectionString))
+        {
+            services.AddScoped<IBlobStorageService, AzureBlobStorageService>();
+        }
+        else
+        {
+            services.AddScoped<IBlobStorageService, LocalFileBlobStorageService>();
+        }
     }
 
     private static void AddJwtAuthentication(IServiceCollection services, IConfiguration configuration)

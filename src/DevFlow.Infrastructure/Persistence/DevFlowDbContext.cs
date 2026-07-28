@@ -31,6 +31,8 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DevFlowDbContext).Assembly);
@@ -60,6 +62,8 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
         // callers have to remember to add.
         modelBuilder.Entity<Notification>().HasQueryFilter(
             n => n.TenantId == _currentUserService.TenantId && n.UserId == _currentUserService.UserId);
+
+        modelBuilder.Entity<TaskAttachment>().HasQueryFilter(a => a.TenantId == _currentUserService.TenantId);
 
         base.OnModelCreating(modelBuilder);
     }

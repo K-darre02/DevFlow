@@ -177,6 +177,17 @@ export interface Notification {
   createdAt: string
 }
 
+export interface Attachment {
+  id: string
+  taskId: string
+  fileName: string
+  contentType: string
+  size: number
+  uploadedByUserId: string
+  uploadedByEmail: string | null
+  createdAt: string
+}
+
 export interface GetNotificationsParams {
   page?: number
   pageSize?: number

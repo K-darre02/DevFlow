@@ -465,6 +465,13 @@ lerna-debug.log*
 docker-compose.override.yml
 
 # ============================
+# Local file storage (LocalFileBlobStorageService dev/test substitute for
+# Azure Blob Storage — see src/DevFlow.Api/Storage). Uploaded files, never
+# source.
+# ============================
+/src/DevFlow.Api/App_Data/
+
+# ============================
 # Editor
 # ============================
 .vscode/*

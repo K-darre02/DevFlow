@@ -31,5 +31,7 @@ public interface IApplicationDbContext
 
     DbSet<Notification> Notifications { get; }
 
+    DbSet<TaskAttachment> TaskAttachments { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

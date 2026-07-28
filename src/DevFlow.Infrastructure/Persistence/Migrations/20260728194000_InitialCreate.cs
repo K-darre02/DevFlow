@@ -228,6 +228,44 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                         onDelete: ReferentialAction.SetNull);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "TaskAttachments",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    TenantId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TaskId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UploadedByUserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FileName = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    BlobKey = table.Column<string>(type: "text", nullable: false),
+                    ContentType = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    Size = table.Column<long>(type: "bigint", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TaskAttachments", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TaskAttachments_TaskItems_TaskId",
+                        column: x => x.TaskId,
+                        principalTable: "TaskItems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_TaskAttachments_Tenants_TenantId",
+                        column: x => x.TenantId,
+                        principalTable: "Tenants",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_TaskAttachments_Users_UploadedByUserId",
+                        column: x => x.UploadedByUserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_ActivityLogs_TenantId_CreatedAtTicks",
                 table: "ActivityLogs",
@@ -275,6 +313,27 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_TaskAttachments_BlobKey",
+                table: "TaskAttachments",
+                column: "BlobKey",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TaskAttachments_TaskId",
+                table: "TaskAttachments",
+                column: "TaskId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TaskAttachments_TenantId_TaskId",
+                table: "TaskAttachments",
+                columns: new[] { "TenantId", "TaskId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TaskAttachments_UploadedByUserId",
+                table: "TaskAttachments",
+                column: "UploadedByUserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_TaskItems_AssigneeUserId",
                 table: "TaskItems",
                 column: "AssigneeUserId");
@@ -320,10 +379,13 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                 name: "Notifications");
 
             migrationBuilder.DropTable(
-                name: "TaskItems");
+                name: "TaskAttachments");
 
             migrationBuilder.DropTable(
                 name: "TenantMembers");
+
+            migrationBuilder.DropTable(
+                name: "TaskItems");
 
             migrationBuilder.DropTable(
                 name: "Projects");

@@ -192,6 +192,58 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                     b.ToTable("Projects");
                 });
 
+            modelBuilder.Entity("DevFlow.Domain.Entities.TaskAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BlobKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlobKey")
+                        .IsUnique();
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex("TenantId", "TaskId");
+
+                    b.ToTable("TaskAttachments");
+                });
+
             modelBuilder.Entity("DevFlow.Domain.Entities.TaskItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -395,6 +447,33 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("DevFlow.Domain.Entities.TaskAttachment", b =>
+                {
+                    b.HasOne("DevFlow.Domain.Entities.TaskItem", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DevFlow.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DevFlow.Domain.Entities.User", "UploadedByUser")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Task");
+
+                    b.Navigation("Tenant");
+
+                    b.Navigation("UploadedByUser");
                 });
 
             modelBuilder.Entity("DevFlow.Domain.Entities.TaskItem", b =>

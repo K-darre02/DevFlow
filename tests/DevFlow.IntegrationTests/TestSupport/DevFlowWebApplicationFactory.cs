@@ -24,6 +24,16 @@ public class DevFlowWebApplicationFactory : WebApplicationFactory<Program>
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
 
+    // Path.Combine discards any earlier segment once it hits an absolute
+    // one, so setting Storage:Local:RootPath to an absolute temp path here
+    // makes LocalFileBlobStorageService.ResolvePath ignore
+    // IWebHostEnvironment.ContentRootPath entirely — without this,
+    // WebApplicationFactory's ContentRootPath resolves to the real
+    // DevFlow.Api project directory, and every attachment test would write
+    // real files under src/DevFlow.Api/App_Data instead of somewhere
+    // disposable.
+    private readonly string _localStorageRootPath = Path.Combine(Path.GetTempPath(), "devflow-tests-storage", Guid.NewGuid().ToString());
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         _connection.Open();
@@ -39,7 +49,8 @@ public class DevFlowWebApplicationFactory : WebApplicationFactory<Program>
                 ["Jwt:Issuer"] = JwtIssuer,
                 ["Jwt:Audience"] = JwtAudience,
                 ["Jwt:AccessTokenMinutes"] = "15",
-                ["Jwt:SigningKey"] = JwtSigningKey
+                ["Jwt:SigningKey"] = JwtSigningKey,
+                ["Storage:Local:RootPath"] = _localStorageRootPath
             });
         });
 
@@ -88,6 +99,11 @@ public class DevFlowWebApplicationFactory : WebApplicationFactory<Program>
         if (disposing)
         {
             _connection.Dispose();
+
+            if (Directory.Exists(_localStorageRootPath))
+            {
+                Directory.Delete(_localStorageRootPath, recursive: true);
+            }
         }
     }
 }

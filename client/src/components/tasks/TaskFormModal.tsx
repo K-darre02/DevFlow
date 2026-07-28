@@ -10,6 +10,7 @@ import { ErrorBanner } from '../ui/ErrorBanner'
 import { Input } from '../ui/Input'
 import { Modal } from '../ui/Modal'
 import { Select } from '../ui/Select'
+import { TaskAttachments } from './TaskAttachments'
 
 interface TaskFormModalProps {
   isOpen: boolean
@@ -167,6 +168,12 @@ export function TaskFormModal({ isOpen, onClose, projectId, task, onSaved }: Tas
           <p className="text-sm text-slate-600">
             Assigned to {task?.assigneeUserId === currentUser?.userId ? 'you' : 'another user'}
           </p>
+        )}
+
+        {isEditing && (
+          <div className="border-t border-slate-200 pt-4">
+            <TaskAttachments taskId={task.id} />
+          </div>
         )}
 
         <ErrorBanner messages={errors} />

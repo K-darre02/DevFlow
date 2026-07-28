@@ -31,6 +31,7 @@ export class ApiError extends Error {
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  /** A FormData body (e.g. file upload) is sent as-is, with no Content-Type set — the browser fills in the multipart boundary itself. Anything else is JSON-encoded. */
   body?: unknown
   /** Attach the Authorization header. Default true — set false for /auth/* calls. */
   auth?: boolean
@@ -40,9 +41,10 @@ interface RequestOptions {
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true, headers: extraHeaders } = options
+  const isFormData = body instanceof FormData
 
   const headers: Record<string, string> = { ...extraHeaders }
-  if (body !== undefined) {
+  if (body !== undefined && !isFormData) {
     headers['Content-Type'] = 'application/json'
   }
   if (auth) {
@@ -55,7 +57,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const response = await fetch(`/api${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: isFormData ? (body as FormData) : body !== undefined ? JSON.stringify(body) : undefined,
   })
 
   if (response.status === 401 && auth) {
