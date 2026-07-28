@@ -1,4 +1,5 @@
 using DevFlow.Api;
+using DevFlow.Api.Realtime;
 using DevFlow.Application;
 using DevFlow.Infrastructure;
 using Microsoft.Extensions.Hosting;
@@ -44,6 +45,7 @@ try
 
     app.MapControllers();
     app.MapHealthChecks("/health");
+    app.MapHub<TaskHub>("/hubs/tasks");
 
     app.Run();
 }

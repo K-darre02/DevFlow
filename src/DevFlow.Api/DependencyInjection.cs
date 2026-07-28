@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
 using DevFlow.Api.Middleware;
@@ -6,6 +7,7 @@ using DevFlow.Application.Common;
 using DevFlow.Domain.Entities;
 using DevFlow.Domain.Enums;
 using DevFlow.Infrastructure.Persistence;
+using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
@@ -75,6 +77,39 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddSingleton<JwtTokenService>();
 
+        // Self-hosted ASP.NET Core SignalR (built into the shared framework —
+        // no separate package). See docs/devflow/01-architecture.md §9: this
+        // is the documented local/single-instance substitute for Azure
+        // SignalR Service, used directly here rather than as a stand-in.
+        // AddJsonProtocol has its own JsonSerializerOptions, entirely
+        // separate from AddControllers().AddJsonOptions above — without this,
+        // enums broadcast over the hub would serialize as raw integers while
+        // the REST API sends their names, a silent mismatch the frontend
+        // would otherwise have to work around twice.
+        // AddJsonProtocol has its own JsonSerializerOptions, entirely
+        // separate from AddControllers().AddJsonOptions above — without this,
+        // enums broadcast over the hub would serialize as raw integers while
+        // the REST API sends their names. Any .NET SignalR client must
+        // configure a matching JsonStringEnumConverter of its own (there's no
+        // content negotiation for payload shape the way REST has
+        // Content-Type — see TaskHubTests.BuildConnection) or it will fail to
+        // deserialize incoming messages silently. A browser/JS client is
+        // unaffected: JSON strings map to plain JS strings either way.
+        services.AddSignalR()
+            .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+        // DevFlow.Application's own AddMediatR call (DevFlow.Application/
+        // DependencyInjection.cs) only scans its own assembly, so it never
+        // finds the INotificationHandler<T> implementations in
+        // DevFlow.Api/Realtime — those live here specifically because they
+        // depend on IHubContext<TaskHub>, which is an Api-layer/SignalR
+        // concern Application must not reference. A second
+        // RegisterServicesFromAssembly call, scoped to this assembly, is
+        // what actually wires them up; MediatR's core services
+        // (IMediator/ISender/IPublisher) are safe to register more than
+        // once.
+        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+
         AddJwtAuthentication(services, configuration);
 
         return services;
@@ -106,6 +141,27 @@ public static class DependencyInjection
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
+                };
+
+                // Browsers' native WebSocket API can't set an Authorization
+                // header, so SignalR's JS client sends the token as an
+                // "access_token" query string parameter on the hub request
+                // instead — this is the standard, documented way to bridge
+                // that onto the same JWT bearer handler used everywhere else,
+                // scoped to hub paths only so it doesn't relax normal REST
+                // endpoints (which still require a real Authorization header).
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

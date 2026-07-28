@@ -1,9 +1,12 @@
 using DevFlow.Application.Common;
 using DevFlow.Application.Common.Exceptions;
+using DevFlow.Application.Realtime;
 using DevFlow.Domain.Entities;
 using DevFlow.Domain.Enums;
 using FluentValidation;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DevFlow.Application.Tasks;
 
@@ -12,15 +15,21 @@ public class TaskService : ITaskService
     private readonly IApplicationDbContext _context;
     private readonly IValidator<CreateTaskInput> _createValidator;
     private readonly IValidator<UpdateTaskInput> _updateValidator;
+    private readonly IPublisher _publisher;
+    private readonly ILogger<TaskService> _logger;
 
     public TaskService(
         IApplicationDbContext context,
         IValidator<CreateTaskInput> createValidator,
-        IValidator<UpdateTaskInput> updateValidator)
+        IValidator<UpdateTaskInput> updateValidator,
+        IPublisher publisher,
+        ILogger<TaskService> logger)
     {
         _context = context;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
+        _publisher = publisher;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<TaskItem>> GetTasksAsync(
@@ -72,6 +81,8 @@ public class TaskService : ITaskService
         _context.TaskItems.Add(task);
         await _context.SaveChangesAsync(cancellationToken);
 
+        await PublishSafeAsync(new TaskCreatedNotification(task), cancellationToken);
+
         return task;
     }
 
@@ -96,6 +107,9 @@ public class TaskService : ITaskService
         // enforcement — not the plain comparison of expectedVersion above,
         // which would leave a race window between reading and saving.
         SetExpectedVersion(task, expectedVersion);
+
+        var previousStatus = task.Status;
+        var previousAssigneeUserId = task.AssigneeUserId;
 
         if (input.Title is not null)
         {
@@ -138,6 +152,34 @@ public class TaskService : ITaskService
             throw new ConcurrencyConflictException<TaskItem>(current);
         }
 
+        // Granular, semantic events rather than one always-fired "updated" —
+        // a single PATCH can trigger more than one of these (e.g. moving a
+        // task straight to Done fires both Moved and Completed).
+        var statusChanged = input.Status is not null && input.Status.Value != previousStatus;
+        var assigneeChanged = input.AssigneeUserId is not null && input.AssigneeUserId != previousAssigneeUserId;
+        var otherFieldsChanged = input.Title is not null || input.Description is not null
+            || input.Priority is not null || input.DueDate is not null;
+
+        if (statusChanged)
+        {
+            await PublishSafeAsync(new TaskMovedNotification(task, previousStatus), cancellationToken);
+        }
+
+        if (task.Status == TaskItemStatus.Done && previousStatus != TaskItemStatus.Done)
+        {
+            await PublishSafeAsync(new TaskCompletedNotification(task), cancellationToken);
+        }
+
+        if (assigneeChanged)
+        {
+            await PublishSafeAsync(new TaskAssignedNotification(task), cancellationToken);
+        }
+
+        if (otherFieldsChanged)
+        {
+            await PublishSafeAsync(new TaskUpdatedNotification(task), cancellationToken);
+        }
+
         return task;
     }
 
@@ -153,7 +195,24 @@ public class TaskService : ITaskService
         _context.TaskItems.Remove(task);
         await _context.SaveChangesAsync(cancellationToken);
 
+        await PublishSafeAsync(new TaskDeletedNotification(task), cancellationToken);
+
         return true;
+    }
+
+    // Swallows and logs rather than rethrowing: a broadcast failure (e.g. a
+    // transient SignalR issue) must never turn an already-committed,
+    // otherwise-successful write into a 500 for the caller.
+    private async Task PublishSafeAsync(INotification notification, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _publisher.Publish(notification, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish {NotificationType} after a successful task write", notification.GetType().Name);
+        }
     }
 
     private void SetExpectedVersion(TaskItem task, int expectedVersion)

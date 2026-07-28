@@ -1,10 +1,12 @@
 using DevFlow.Application.Common.Exceptions;
+using DevFlow.Application.Realtime;
 using DevFlow.Application.Tasks;
 using DevFlow.Domain.Entities;
 using DevFlow.Domain.Enums;
 using DevFlow.IntegrationTests.TestSupport;
 using FluentAssertions;
 using FluentValidation;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace DevFlow.IntegrationTests.Services;
@@ -14,10 +16,16 @@ public class TaskServiceTests : SqliteContextFixture
     private readonly ITaskService _service;
     private readonly Tenant _tenant;
     private readonly Project _project;
+    private readonly RecordingPublisher _publisher = new();
 
     public TaskServiceTests()
     {
-        _service = new TaskService(DbContext, new CreateTaskInputValidator(DbContext), new UpdateTaskInputValidator(DbContext));
+        _service = new TaskService(
+            DbContext,
+            new CreateTaskInputValidator(DbContext),
+            new UpdateTaskInputValidator(DbContext),
+            _publisher,
+            NullLogger<TaskService>.Instance);
 
         _tenant = new Tenant { Name = "Tenant" };
         _project = new Project { TenantId = _tenant.Id, Tenant = _tenant, Name = "Project" };
@@ -40,6 +48,8 @@ public class TaskServiceTests : SqliteContextFixture
         task.Priority.Should().Be(TaskPriority.High);
         task.Status.Should().Be(TaskItemStatus.Backlog); // default
         task.Version.Should().Be(1);
+
+        _publisher.Published.Should().ContainSingle().Which.Should().BeOfType<TaskCreatedNotification>();
     }
 
     [Fact]
@@ -50,6 +60,7 @@ public class TaskServiceTests : SqliteContextFixture
         var act = () => _service.CreateTaskAsync(_tenant.Id, input, default);
 
         await act.Should().ThrowAsync<ValidationException>();
+        _publisher.Published.Should().BeEmpty(); // validation failed before any write — nothing to broadcast
     }
 
     [Fact]
@@ -87,6 +98,7 @@ public class TaskServiceTests : SqliteContextFixture
                                                      // tracked instance below, so `created`
                                                      // itself mutates in place — capture the
                                                      // pre-update value now, not after.
+        _publisher.Published.Clear(); // drop the TaskCreatedNotification from setup above
 
         var update = new UpdateTaskInput(Title: null, Description: null, Status: null, Priority: TaskPriority.Urgent, AssigneeUserId: null, DueDate: null);
         var updated = await _service.UpdateTaskAsync(created.Id, update, versionBeforeUpdate, default);
@@ -95,6 +107,9 @@ public class TaskServiceTests : SqliteContextFixture
         updated!.Title.Should().Be("Title"); // untouched
         updated.Priority.Should().Be(TaskPriority.Urgent);
         updated.Version.Should().Be(versionBeforeUpdate + 1);
+
+        // Priority is neither Status nor AssigneeUserId — the generic event, not Moved/Assigned/Completed.
+        _publisher.Published.Should().ContainSingle().Which.Should().BeOfType<TaskUpdatedNotification>();
     }
 
     [Fact]
@@ -107,6 +122,10 @@ public class TaskServiceTests : SqliteContextFixture
 
         updated!.Status.Should().Be(TaskItemStatus.Done);
         updated.CompletedAt.Should().NotBeNull();
+
+        // Moving into Done fires both: it's a column move *and* a completion.
+        _publisher.Published.Should().Contain(n => n is TaskMovedNotification);
+        _publisher.Published.Should().Contain(n => n is TaskCompletedNotification);
     }
 
     [Fact]
@@ -114,11 +133,14 @@ public class TaskServiceTests : SqliteContextFixture
     {
         var created = await _service.CreateTaskAsync(_tenant.Id, new CreateTaskInput(_project.Id, "Title", null, TaskPriority.Medium, null, null), default);
         var done = await _service.UpdateTaskAsync(created.Id, new UpdateTaskInput(null, null, TaskItemStatus.Done, null, null, null), created.Version, default);
+        _publisher.Published.Clear();
 
         var reopened = await _service.UpdateTaskAsync(done!.Id, new UpdateTaskInput(null, null, TaskItemStatus.InProgress, null, null, null), done.Version, default);
 
         reopened!.Status.Should().Be(TaskItemStatus.InProgress);
         reopened.CompletedAt.Should().BeNull();
+
+        _publisher.Published.Should().ContainSingle().Which.Should().BeOfType<TaskMovedNotification>();
     }
 
     [Fact]
@@ -130,12 +152,43 @@ public class TaskServiceTests : SqliteContextFixture
 
         // First update succeeds and bumps the version...
         await _service.UpdateTaskAsync(created.Id, new UpdateTaskInput("Updated once", null, null, null, null, null), originalVersion, default);
+        _publisher.Published.Clear();
 
         // ...so retrying with the *original* (now stale) version must fail.
         var act = () => _service.UpdateTaskAsync(created.Id, new UpdateTaskInput("Updated twice", null, null, null, null, null), originalVersion, default);
 
         var exception = await act.Should().ThrowAsync<ConcurrencyConflictException<TaskItem>>();
         exception.Which.CurrentState.Title.Should().Be("Updated once");
+        _publisher.Published.Should().BeEmpty(); // the write failed — nothing to broadcast
+    }
+
+    [Fact]
+    public async Task UpdateTaskAsync_changing_the_assignee_publishes_TaskAssignedNotification()
+    {
+        var created = await _service.CreateTaskAsync(_tenant.Id, new CreateTaskInput(_project.Id, "Title", null, TaskPriority.Medium, null, null), default);
+        var user = new User { Email = "assignee@example.com", PasswordHash = "unused" };
+        var membership = new TenantMember { TenantId = _tenant.Id, Tenant = _tenant, UserId = user.Id, User = user, Role = TenantRole.Member };
+        DbContext.AddRange(user, membership);
+        await DbContext.SaveChangesAsync();
+        _publisher.Published.Clear();
+
+        var updated = await _service.UpdateTaskAsync(
+            created.Id, new UpdateTaskInput(null, null, null, null, user.Id, null), created.Version, default);
+
+        updated!.AssigneeUserId.Should().Be(user.Id);
+        _publisher.Published.Should().ContainSingle().Which.Should().BeOfType<TaskAssignedNotification>();
+    }
+
+    [Fact]
+    public async Task DeleteTaskAsync_publishes_TaskDeletedNotification()
+    {
+        var created = await _service.CreateTaskAsync(_tenant.Id, new CreateTaskInput(_project.Id, "Title", null, TaskPriority.Medium, null, null), default);
+        _publisher.Published.Clear();
+
+        var deleted = await _service.DeleteTaskAsync(created.Id, default);
+
+        deleted.Should().BeTrue();
+        _publisher.Published.Should().ContainSingle().Which.Should().BeOfType<TaskDeletedNotification>();
     }
 
     [Fact]

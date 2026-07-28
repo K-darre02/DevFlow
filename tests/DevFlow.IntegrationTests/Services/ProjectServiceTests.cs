@@ -1,7 +1,9 @@
 using DevFlow.Application.Projects;
+using DevFlow.Application.Realtime;
 using DevFlow.Domain.Entities;
 using DevFlow.IntegrationTests.TestSupport;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace DevFlow.IntegrationTests.Services;
@@ -9,10 +11,11 @@ namespace DevFlow.IntegrationTests.Services;
 public class ProjectServiceTests : SqliteContextFixture
 {
     private readonly IProjectService _service;
+    private readonly RecordingPublisher _publisher = new();
 
     public ProjectServiceTests()
     {
-        _service = new ProjectService(DbContext);
+        _service = new ProjectService(DbContext, _publisher, NullLogger<ProjectService>.Instance);
     }
 
     [Fact]
@@ -28,6 +31,8 @@ public class ProjectServiceTests : SqliteContextFixture
         project.TenantId.Should().Be(tenant.Id);
         project.Name.Should().Be("New Project");
         project.IsArchived.Should().BeFalse();
+
+        _publisher.Published.Should().ContainSingle().Which.Should().BeOfType<ProjectCreatedNotification>();
     }
 
     [Fact]
@@ -55,12 +60,32 @@ public class ProjectServiceTests : SqliteContextFixture
         CurrentUser.TenantId = tenant.Id;
 
         var project = await _service.CreateProjectAsync(tenant.Id, "Original Name", default);
+        _publisher.Published.Clear();
 
         var updated = await _service.UpdateProjectAsync(project.Id, name: null, isArchived: true, default);
 
         updated.Should().NotBeNull();
         updated!.Name.Should().Be("Original Name"); // untouched
         updated.IsArchived.Should().BeTrue();
+
+        _publisher.Published.Should().ContainSingle().Which.Should().BeOfType<ProjectArchivedNotification>();
+    }
+
+    [Fact]
+    public async Task UpdateProjectAsync_unarchiving_does_not_publish_ProjectArchivedNotification()
+    {
+        var tenant = new Tenant { Name = "Tenant" };
+        DbContext.Tenants.Add(tenant);
+        await DbContext.SaveChangesAsync();
+        CurrentUser.TenantId = tenant.Id;
+
+        var project = await _service.CreateProjectAsync(tenant.Id, "Project", default);
+        await _service.UpdateProjectAsync(project.Id, name: null, isArchived: true, default);
+        _publisher.Published.Clear();
+
+        await _service.UpdateProjectAsync(project.Id, name: null, isArchived: false, default);
+
+        _publisher.Published.Should().BeEmpty();
     }
 
     [Fact]

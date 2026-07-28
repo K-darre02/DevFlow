@@ -1,16 +1,23 @@
 using DevFlow.Application.Common;
+using DevFlow.Application.Realtime;
 using DevFlow.Domain.Entities;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DevFlow.Application.Projects;
 
 public class ProjectService : IProjectService
 {
     private readonly IApplicationDbContext _context;
+    private readonly IPublisher _publisher;
+    private readonly ILogger<ProjectService> _logger;
 
-    public ProjectService(IApplicationDbContext context)
+    public ProjectService(IApplicationDbContext context, IPublisher publisher, ILogger<ProjectService> logger)
     {
         _context = context;
+        _publisher = publisher;
+        _logger = logger;
     }
 
     // No explicit TenantId filter anywhere in this class — every query below
@@ -45,6 +52,8 @@ public class ProjectService : IProjectService
         _context.Projects.Add(project);
         await _context.SaveChangesAsync(cancellationToken);
 
+        await PublishSafeAsync(new ProjectCreatedNotification(project), cancellationToken);
+
         return project;
     }
 
@@ -57,6 +66,8 @@ public class ProjectService : IProjectService
             return null;
         }
 
+        var wasArchived = project.IsArchived;
+
         if (name is not null)
         {
             project.Name = name;
@@ -68,6 +79,13 @@ public class ProjectService : IProjectService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Only the specific not-archived -> archived transition, not every
+        // update (renaming, or unarchiving, doesn't fire this event).
+        if (!wasArchived && project.IsArchived)
+        {
+            await PublishSafeAsync(new ProjectArchivedNotification(project), cancellationToken);
+        }
 
         return project;
     }
@@ -87,5 +105,20 @@ public class ProjectService : IProjectService
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
+    }
+
+    // Swallows and logs rather than rethrowing: a broadcast failure must
+    // never turn an already-committed, otherwise-successful write into a 500
+    // for the caller. Same rationale as TaskService.PublishSafeAsync.
+    private async Task PublishSafeAsync(INotification notification, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _publisher.Publish(notification, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish {NotificationType} after a successful project write", notification.GetType().Name);
+        }
     }
 }

@@ -1,10 +1,13 @@
 import { Link, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../auth/authStore'
+import { useRealtimeConnection } from '../../realtime/useRealtimeConnection'
 import { Button } from '../ui/Button'
+import { ConnectionStatusIndicator } from './ConnectionStatusIndicator'
 
 export function AppLayout() {
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const connectionStatus = useRealtimeConnection()
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -19,6 +22,7 @@ export function AppLayout() {
             </Link>
           </div>
           <div className="flex items-center gap-4">
+            <ConnectionStatusIndicator status={connectionStatus} />
             {user && <span className="text-sm text-slate-600">{user.email}</span>}
             <Button variant="secondary" onClick={logout}>
               Log out

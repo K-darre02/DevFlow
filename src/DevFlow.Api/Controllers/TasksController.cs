@@ -118,16 +118,5 @@ public class TasksController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 
-    private static TaskResponse ToResponse(TaskItem task) => new(
-        task.Id,
-        task.ProjectId,
-        task.AssigneeUserId,
-        task.Title,
-        task.Description,
-        task.Status,
-        task.Priority,
-        task.DueDate,
-        task.CompletedAt,
-        task.CreatedAt,
-        task.Version);
+    private static TaskResponse ToResponse(TaskItem task) => TaskResponseMapper.ToResponse(task);
 }

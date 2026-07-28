@@ -22,6 +22,14 @@ export default defineConfig({
         target: 'http://localhost:5187',
         changeOrigin: true,
       },
+      // Same same-origin rationale as /api above, plus ws: true so the
+      // WebSocket upgrade (SignalR's preferred transport) is proxied too,
+      // not just the initial negotiate HTTP request.
+      '/hubs': {
+        target: 'http://localhost:5187',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

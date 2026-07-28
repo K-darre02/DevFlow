@@ -74,6 +74,5 @@ public class ProjectsController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 
-    private static ProjectResponse ToResponse(Project project) =>
-        new(project.Id, project.TenantId, project.Name, project.IsArchived, project.CreatedAt);
+    private static ProjectResponse ToResponse(Project project) => ProjectResponseMapper.ToResponse(project);
 }
