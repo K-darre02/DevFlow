@@ -33,7 +33,12 @@ public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .HasForeignKey(t => t.AssigneeUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        builder.Property(t => t.RowVersion).IsRowVersion();
+        // Application-managed optimistic concurrency token — see
+        // DevFlow.Domain/Entities/TaskItem.cs for why this isn't a byte[]
+        // rowversion. IsConcurrencyToken() alone (no ValueGeneratedOnAddOrUpdate)
+        // because EF Core doesn't generate this value — DevFlowDbContext does,
+        // in SaveChangesAsync.
+        builder.Property(t => t.Version).IsConcurrencyToken();
 
         // Serves the board query directly: tasks for a project, filtered/grouped by status.
         builder.HasIndex(t => new { t.TenantId, t.ProjectId, t.Status });

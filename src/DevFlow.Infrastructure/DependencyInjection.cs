@@ -1,3 +1,4 @@
+using DevFlow.Application.Common;
 using DevFlow.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -13,6 +14,8 @@ public static class DependencyInjection
     {
         services.AddDbContext<DevFlowDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DevFlowDatabase")));
+
+        services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<DevFlowDbContext>());
 
         return services;
     }

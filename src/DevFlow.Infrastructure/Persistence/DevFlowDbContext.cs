@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DevFlow.Infrastructure.Persistence;
 
-public class DevFlowDbContext : DbContext
+public class DevFlowDbContext : DbContext, IApplicationDbContext
 {
     private readonly ICurrentUserService _currentUserService;
 
@@ -57,6 +57,22 @@ public class DevFlowDbContext : DbContext
             else if (entry.State == EntityState.Modified)
             {
                 entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        // TaskItem.Version is the optimistic concurrency token (see
+        // TaskItem.cs). Nothing generates it automatically — this is that
+        // generation, applied to every modified task on every save so the
+        // token changes whenever the row does, regardless of which fields
+        // changed. A caller that wants to *check* a client-supplied expected
+        // version sets Entry(task).Property(t => t.Version).OriginalValue
+        // before calling SaveChangesAsync; that's independent of the
+        // CurrentValue bump happening here.
+        foreach (var entry in ChangeTracker.Entries<TaskItem>())
+        {
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.Version++;
             }
         }
 

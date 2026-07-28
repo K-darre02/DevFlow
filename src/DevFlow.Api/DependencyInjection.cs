@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json.Serialization;
+using DevFlow.Api.Middleware;
 using DevFlow.Api.Services;
 using DevFlow.Application.Common;
 using DevFlow.Domain.Entities;
@@ -14,7 +16,15 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddControllers();
+        services.AddControllers()
+            // Status/Priority (and any future enum) serialize as their names
+            // ("InProgress", "High") rather than raw integers — matches
+            // docs/devflow/03-api-design.md's documented wire format.
+            .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+        services.AddExceptionHandler<GlobalExceptionHandler>();
+        services.AddProblemDetails();
+
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {

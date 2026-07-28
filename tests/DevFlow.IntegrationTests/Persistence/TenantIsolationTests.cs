@@ -1,8 +1,6 @@
-using DevFlow.Application.Common;
 using DevFlow.Domain.Entities;
-using DevFlow.Infrastructure.Persistence;
+using DevFlow.IntegrationTests.TestSupport;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -12,26 +10,8 @@ namespace DevFlow.IntegrationTests.Persistence;
 // rather than just trusting the LINQ reads correctly. Uses Sqlite in-memory
 // instead of a real Postgres so it runs without Docker — see
 // docs/devflow/04-security.md §2.
-public class TenantIsolationTests : IDisposable
+public class TenantIsolationTests : SqliteContextFixture
 {
-    private readonly SqliteConnection _connection;
-    private readonly DevFlowDbContext _dbContext;
-    private readonly FakeCurrentUserService _currentUser;
-
-    public TenantIsolationTests()
-    {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        var options = new DbContextOptionsBuilder<DevFlowDbContext>()
-            .UseSqlite(_connection)
-            .Options;
-
-        _currentUser = new FakeCurrentUserService();
-        _dbContext = new DevFlowDbContext(options, _currentUser);
-        _dbContext.Database.EnsureCreated();
-    }
-
     [Fact]
     public async Task Projects_query_only_returns_rows_for_the_current_tenant()
     {
@@ -40,21 +20,46 @@ public class TenantIsolationTests : IDisposable
         var projectA = new Project { TenantId = tenantA.Id, Tenant = tenantA, Name = "A's Project" };
         var projectB = new Project { TenantId = tenantB.Id, Tenant = tenantB, Name = "B's Project" };
 
-        _dbContext.AddRange(tenantA, tenantB, projectA, projectB);
-        await _dbContext.SaveChangesAsync();
+        DbContext.AddRange(tenantA, tenantB, projectA, projectB);
+        await DbContext.SaveChangesAsync();
 
         // Same DbContext instance, same compiled model, different resolved
         // tenant — this is exactly what proves the query filter reads
         // _currentUserService.TenantId live per query rather than a value
         // baked in once when the model was first built.
-        _currentUser.TenantId = tenantA.Id;
-        var visibleToA = await _dbContext.Projects.ToListAsync();
+        CurrentUser.TenantId = tenantA.Id;
+        var visibleToA = await DbContext.Projects.ToListAsync();
 
-        _currentUser.TenantId = tenantB.Id;
-        var visibleToB = await _dbContext.Projects.ToListAsync();
+        CurrentUser.TenantId = tenantB.Id;
+        var visibleToB = await DbContext.Projects.ToListAsync();
 
         visibleToA.Should().ContainSingle().Which.Id.Should().Be(projectA.Id);
         visibleToB.Should().ContainSingle().Which.Id.Should().Be(projectB.Id);
+    }
+
+    [Fact]
+    public async Task Tasks_query_only_returns_rows_for_the_current_tenant()
+    {
+        var tenantA = new Tenant { Name = "Tenant A" };
+        var tenantB = new Tenant { Name = "Tenant B" };
+        var projectA = new Project { TenantId = tenantA.Id, Tenant = tenantA, Name = "A's Project" };
+        var projectB = new Project { TenantId = tenantB.Id, Tenant = tenantB, Name = "B's Project" };
+        var taskA = new TaskItem { TenantId = tenantA.Id, Tenant = tenantA, ProjectId = projectA.Id, Project = projectA, Title = "A's Task" };
+        var taskB = new TaskItem { TenantId = tenantB.Id, Tenant = tenantB, ProjectId = projectB.Id, Project = projectB, Title = "B's Task" };
+
+        DbContext.AddRange(tenantA, tenantB, projectA, projectB, taskA, taskB);
+        await DbContext.SaveChangesAsync();
+
+        CurrentUser.TenantId = tenantA.Id;
+        var visibleToA = await DbContext.TaskItems.ToListAsync();
+        var taskBFromA = await DbContext.TaskItems.FirstOrDefaultAsync(t => t.Id == taskB.Id);
+
+        CurrentUser.TenantId = tenantB.Id;
+        var visibleToB = await DbContext.TaskItems.ToListAsync();
+
+        visibleToA.Should().ContainSingle().Which.Id.Should().Be(taskA.Id);
+        taskBFromA.Should().BeNull(); // fetching tenant B's task by id while scoped to tenant A: not found, not a data leak
+        visibleToB.Should().ContainSingle().Which.Id.Should().Be(taskB.Id);
     }
 
     [Fact]
@@ -63,11 +68,11 @@ public class TenantIsolationTests : IDisposable
         var tenant = new Tenant { Name = "Tenant" };
         var project = new Project { TenantId = tenant.Id, Tenant = tenant, Name = "Project" };
 
-        _dbContext.AddRange(tenant, project);
-        await _dbContext.SaveChangesAsync();
+        DbContext.AddRange(tenant, project);
+        await DbContext.SaveChangesAsync();
 
-        _currentUser.TenantId = null;
-        var visible = await _dbContext.Projects.ToListAsync();
+        CurrentUser.TenantId = null;
+        var visible = await DbContext.Projects.ToListAsync();
 
         visible.Should().BeEmpty();
     }
@@ -78,29 +83,16 @@ public class TenantIsolationTests : IDisposable
         var tenant = new Tenant { Name = "Tenant" };
         var user = new User { TenantId = tenant.Id, Tenant = tenant, Email = "person@example.com", PasswordHash = "hash" };
 
-        _dbContext.AddRange(tenant, user);
-        await _dbContext.SaveChangesAsync();
+        DbContext.AddRange(tenant, user);
+        await DbContext.SaveChangesAsync();
 
         // No authenticated tenant at all (as during login/register).
-        _currentUser.TenantId = null;
+        CurrentUser.TenantId = null;
 
-        var scoped = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == user.Email);
-        var unscoped = await _dbContext.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Email == user.Email);
+        var scoped = await DbContext.Users.FirstOrDefaultAsync(u => u.Email == user.Email);
+        var unscoped = await DbContext.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Email == user.Email);
 
         scoped.Should().BeNull();
         unscoped.Should().NotBeNull();
-    }
-
-    public void Dispose()
-    {
-        _dbContext.Dispose();
-        _connection.Dispose();
-    }
-
-    private sealed class FakeCurrentUserService : ICurrentUserService
-    {
-        public Guid? UserId { get; set; }
-
-        public Guid? TenantId { get; set; }
     }
 }
