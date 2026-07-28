@@ -6,6 +6,10 @@ export function getProjects(includeArchived = false) {
   return apiFetch<Project[]>(`/projects${query}`)
 }
 
+export function getProject(id: string) {
+  return apiFetch<Project>(`/projects/${id}`)
+}
+
 export function createProject(request: CreateProjectRequest) {
   return apiFetch<Project>('/projects', { method: 'POST', body: request })
 }

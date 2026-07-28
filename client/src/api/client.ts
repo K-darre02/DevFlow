@@ -9,12 +9,15 @@ import { useAuthStore } from '../auth/authStore'
 export class ApiError extends Error {
   readonly status: number
   readonly errors?: Record<string, string[]>
+  /** The `current` field from a 409 response body (TasksController.UpdateTask) — the authoritative current state. */
+  readonly conflict?: unknown
 
-  constructor(status: number, message: string, errors?: Record<string, string[]>) {
+  constructor(status: number, message: string, errors?: Record<string, string[]>, conflict?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.errors = errors
+    this.conflict = conflict
   }
 
   /** Flattened, human-readable list — field-level errors if present, else the general message. */
@@ -31,12 +34,14 @@ interface RequestOptions {
   body?: unknown
   /** Attach the Authorization header. Default true — set false for /auth/* calls. */
   auth?: boolean
+  /** Extra headers — e.g. If-Match for optimistic-concurrency updates (see api/tasks.ts). */
+  headers?: Record<string, string>
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = true } = options
+  const { method = 'GET', body, auth = true, headers: extraHeaders } = options
 
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { ...extraHeaders }
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
@@ -70,9 +75,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const data: unknown = text ? JSON.parse(text) : undefined
 
   if (!response.ok) {
-    const problem = data as { title?: string; detail?: string; errors?: Record<string, string[]> } | undefined
+    const problem = data as
+      | { title?: string; detail?: string; errors?: Record<string, string[]>; current?: unknown }
+      | undefined
     const message = problem?.detail ?? problem?.title ?? `Request failed (${response.status})`
-    throw new ApiError(response.status, message, problem?.errors)
+    throw new ApiError(response.status, message, problem?.errors, problem?.current)
   }
 
   return data as T

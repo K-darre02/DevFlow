@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { createProject, getProjects } from '../api/projects'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { Input } from '../components/ui/Input'
+import { Spinner } from '../components/ui/Spinner'
 
 export function ProjectsPage() {
   const queryClient = useQueryClient()
@@ -60,7 +62,7 @@ export function ProjectsPage() {
       <Card>
         <h2 className="mb-4 text-lg font-semibold text-slate-900">Projects</h2>
 
-        {projectsQuery.isLoading && <p className="text-sm text-slate-500">Loading projects…</p>}
+        {projectsQuery.isLoading && <Spinner label="Loading projects…" />}
 
         {projectsQuery.isError && (
           <ErrorBanner
@@ -79,11 +81,16 @@ export function ProjectsPage() {
         {projectsQuery.data && projectsQuery.data.length > 0 && (
           <ul className="divide-y divide-slate-200">
             {projectsQuery.data.map((project) => (
-              <li key={project.id} className="flex items-center justify-between py-3">
-                <span className="font-medium text-slate-900">{project.name}</span>
-                <span className="text-xs text-slate-500">
-                  Created {new Date(project.createdAt).toLocaleDateString()}
-                </span>
+              <li key={project.id} className="py-3">
+                <Link
+                  to={`/projects/${project.id}`}
+                  className="flex items-center justify-between rounded-md px-2 py-1 -mx-2 hover:bg-slate-50"
+                >
+                  <span className="font-medium text-slate-900">{project.name}</span>
+                  <span className="text-xs text-slate-500">
+                    Created {new Date(project.createdAt).toLocaleDateString()}
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
