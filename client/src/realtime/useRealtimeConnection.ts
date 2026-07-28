@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { HubConnectionBuilder, type HubConnection } from '@microsoft/signalr'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../auth/authStore'
+import { registerNotificationEventHandlers } from './notificationEvents'
 import { registerTaskEventHandlers } from './taskEvents'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
@@ -34,6 +35,7 @@ export function useRealtimeConnection(): ConnectionStatus {
 
     connectionRef.current = connection
     registerTaskEventHandlers(connection, queryClient)
+    registerNotificationEventHandlers(connection, queryClient)
 
     connection.onreconnecting(() => setStatus('reconnecting'))
     connection.onreconnected(() => setStatus('connected'))

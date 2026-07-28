@@ -14,7 +14,8 @@ namespace DevFlow.Application.Realtime;
 
 public record MemberInvitedNotification(Invitation Invitation) : INotification;
 
-public record MemberJoinedNotification(TenantMember Membership) : INotification;
+/// <summary>InvitedByUserId identifies who to notify ("your invitation was accepted") — Membership alone doesn't carry that.</summary>
+public record MemberJoinedNotification(TenantMember Membership, Guid InvitedByUserId) : INotification;
 
 public record RoleChangedNotification(TenantMember Membership, TenantRole PreviousRole) : INotification;
 

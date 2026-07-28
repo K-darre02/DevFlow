@@ -23,3 +23,13 @@ public record TaskAssignedNotification(TaskItem Task) : INotification;
 public record TaskCompletedNotification(TaskItem Task) : INotification;
 
 public record TaskDeletedNotification(TaskItem Task) : INotification;
+
+/// <summary>
+/// Published only when the caller explicitly set Description in this
+/// request (CreateTaskInput.Description not null, or
+/// UpdateTaskInput.Description not null) and it resolved to at least one
+/// tenant member — never on unrelated field-only updates, so editing a
+/// task's priority doesn't re-notify people already mentioned in an
+/// untouched description. See TaskService and MentionParser.
+/// </summary>
+public record TaskMentionedNotification(TaskItem Task, IReadOnlyList<Guid> MentionedUserIds) : INotification;

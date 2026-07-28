@@ -3,6 +3,7 @@ import { useAuthStore } from '../../auth/authStore'
 import { useRealtimeConnection } from '../../realtime/useRealtimeConnection'
 import { Button } from '../ui/Button'
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator'
+import { NotificationBell } from './NotificationBell'
 
 export function AppLayout() {
   const user = useAuthStore((state) => state.user)
@@ -26,6 +27,7 @@ export function AppLayout() {
           </div>
           <div className="flex items-center gap-4">
             <ConnectionStatusIndicator status={connectionStatus} />
+            <NotificationBell />
             {user && <span className="text-sm text-slate-600">{user.email}</span>}
             <Button variant="secondary" onClick={logout}>
               Log out

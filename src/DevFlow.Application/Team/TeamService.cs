@@ -143,7 +143,7 @@ public class TeamService : ITeamService
             throw new ForbiddenException("You are already a member of this workspace.");
         }
 
-        await PublishSafeAsync(new MemberJoinedNotification(membership), cancellationToken);
+        await PublishSafeAsync(new MemberJoinedNotification(membership, invitation.InvitedByUserId), cancellationToken);
 
         return (user, membership);
     }

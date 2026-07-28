@@ -116,6 +116,52 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                     b.ToTable("Invitations");
                 });
 
+            modelBuilder.Entity("DevFlow.Domain.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("CreatedAtTicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId", "CreatedAtTicks");
+
+                    b.HasIndex("TenantId", "UserId", "IsRead");
+
+                    b.ToTable("Notifications");
+                });
+
             modelBuilder.Entity("DevFlow.Domain.Entities.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -319,6 +365,25 @@ namespace DevFlow.Infrastructure.Persistence.Migrations
                     b.Navigation("InvitedByUser");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("DevFlow.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("DevFlow.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DevFlow.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("DevFlow.Domain.Entities.Project", b =>

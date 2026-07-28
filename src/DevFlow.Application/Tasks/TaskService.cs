@@ -83,6 +83,16 @@ public class TaskService : ITaskService
 
         await PublishSafeAsync(new TaskCreatedNotification(task), cancellationToken);
 
+        // Assigning on creation is just as much an assignment as assigning
+        // via a later PATCH — the assignee should be notified either way,
+        // not only when AssigneeUserId changes on an existing task.
+        if (task.AssigneeUserId is not null)
+        {
+            await PublishSafeAsync(new TaskAssignedNotification(task), cancellationToken);
+        }
+
+        await PublishMentionsIfAnyAsync(task, input.Description, cancellationToken);
+
         return task;
     }
 
@@ -180,6 +190,15 @@ public class TaskService : ITaskService
             await PublishSafeAsync(new TaskUpdatedNotification(task), cancellationToken);
         }
 
+        // Only when the caller explicitly changed Description in *this*
+        // request — not on every update, which would re-notify people
+        // already mentioned in an otherwise-untouched description every
+        // time someone e.g. changes the priority.
+        if (input.Description is not null)
+        {
+            await PublishMentionsIfAnyAsync(task, input.Description, cancellationToken);
+        }
+
         return task;
     }
 
@@ -198,6 +217,16 @@ public class TaskService : ITaskService
         await PublishSafeAsync(new TaskDeletedNotification(task), cancellationToken);
 
         return true;
+    }
+
+    private async Task PublishMentionsIfAnyAsync(TaskItem task, string? description, CancellationToken cancellationToken)
+    {
+        var mentionedUserIds = await MentionParser.ResolveMentionedUserIdsAsync(_context, description, cancellationToken);
+
+        if (mentionedUserIds.Count > 0)
+        {
+            await PublishSafeAsync(new TaskMentionedNotification(task, mentionedUserIds), cancellationToken);
+        }
     }
 
     // Swallows and logs rather than rethrowing: a broadcast failure (e.g. a

@@ -1,5 +1,6 @@
 using System.Reflection;
 using DevFlow.Application.Activities;
+using DevFlow.Application.Notifications;
 using DevFlow.Application.Projects;
 using DevFlow.Application.Tasks;
 using DevFlow.Application.Team;
@@ -42,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IActivityLogService, ActivityLogService>();
+        services.AddScoped<INotificationService, NotificationService>();
 
         return services;
     }

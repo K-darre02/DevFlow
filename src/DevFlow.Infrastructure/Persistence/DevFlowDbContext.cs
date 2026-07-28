@@ -29,6 +29,8 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
 
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DevFlowDbContext).Assembly);
@@ -50,6 +52,14 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<Project>().HasQueryFilter(p => p.TenantId == _currentUserService.TenantId);
         modelBuilder.Entity<TaskItem>().HasQueryFilter(t => t.TenantId == _currentUserService.TenantId);
         modelBuilder.Entity<ActivityLog>().HasQueryFilter(a => a.TenantId == _currentUserService.TenantId);
+
+        // Notification is the one entity in this system scoped by *both*
+        // tenant and user — not tenant-wide like everything above. "Users
+        // only see their own notifications" is enforced here structurally,
+        // the same way tenant isolation itself is, rather than as a filter
+        // callers have to remember to add.
+        modelBuilder.Entity<Notification>().HasQueryFilter(
+            n => n.TenantId == _currentUserService.TenantId && n.UserId == _currentUserService.UserId);
 
         base.OnModelCreating(modelBuilder);
     }
@@ -92,6 +102,14 @@ public class DevFlowDbContext : DbContext, IApplicationDbContext
         // ordering by CreatedAt itself). Set from the same `now` as
         // CreatedAt above so the two never disagree.
         foreach (var entry in ChangeTracker.Entries<ActivityLog>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAtTicks = now.Ticks;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Notification>())
         {
             if (entry.State == EntityState.Added)
             {

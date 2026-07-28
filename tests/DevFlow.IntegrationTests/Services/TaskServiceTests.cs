@@ -53,6 +53,22 @@ public class TaskServiceTests : SqliteContextFixture
     }
 
     [Fact]
+    public async Task CreateTaskAsync_with_an_assignee_also_publishes_TaskAssignedNotification()
+    {
+        var user = new User { Email = "assignee@example.com", PasswordHash = "unused" };
+        var membership = new TenantMember { TenantId = _tenant.Id, Tenant = _tenant, UserId = user.Id, User = user, Role = TenantRole.Member };
+        DbContext.AddRange(user, membership);
+        await DbContext.SaveChangesAsync();
+
+        var input = new CreateTaskInput(_project.Id, "Assigned at creation", null, TaskPriority.Medium, user.Id, null);
+        var task = await _service.CreateTaskAsync(_tenant.Id, input, default);
+
+        task.AssigneeUserId.Should().Be(user.Id);
+        _publisher.Published.Should().Contain(n => n is TaskCreatedNotification);
+        _publisher.Published.Should().Contain(n => n is TaskAssignedNotification);
+    }
+
+    [Fact]
     public async Task CreateTaskAsync_throws_when_the_project_does_not_exist_for_this_tenant()
     {
         var input = new CreateTaskInput(Guid.NewGuid(), "Orphan task", null, TaskPriority.Medium, null, null);

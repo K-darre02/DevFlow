@@ -194,7 +194,7 @@ public class ActivityLogNotificationHandlerTests : SqliteContextFixture
         await DbContext.SaveChangesAsync();
         var membership = new TenantMember { TenantId = _tenant.Id, Tenant = _tenant, UserId = joiningUser.Id, User = joiningUser, Role = TenantRole.Member };
 
-        await handler.Handle(new MemberJoinedNotification(membership), default);
+        await handler.Handle(new MemberJoinedNotification(membership, _actor.Id), default);
 
         var activity = await OnlyActivityAsync();
         activity.ActivityType.Should().Be(ActivityType.MemberJoined);

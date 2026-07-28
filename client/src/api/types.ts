@@ -164,3 +164,24 @@ export interface GetActivitiesParams {
   userId?: string
   activityType?: ActivityType
 }
+
+// Mirrors DevFlow.Domain.Enums.NotificationType.
+export type NotificationType = 'TaskAssigned' | 'TaskMentioned' | 'ProjectChanged' | 'TeamInvitationAccepted' | 'RoleChanged'
+
+export interface Notification {
+  id: string
+  type: NotificationType
+  title: string
+  message: string
+  isRead: boolean
+  createdAt: string
+}
+
+export interface GetNotificationsParams {
+  page?: number
+  pageSize?: number
+}
+
+export interface UnreadCountResponse {
+  count: number
+}
