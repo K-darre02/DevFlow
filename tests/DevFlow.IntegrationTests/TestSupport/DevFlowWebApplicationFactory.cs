@@ -1,4 +1,5 @@
 using System.Text;
+using DevFlow.Application.Search;
 using DevFlow.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
@@ -7,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 
 namespace DevFlow.IntegrationTests.TestSupport;
@@ -63,6 +65,17 @@ public class DevFlowWebApplicationFactory : WebApplicationFactory<Program>
             }
 
             services.AddDbContext<DevFlowDbContext>(options => options.UseSqlite(_connection));
+
+            // Two registrations exist for ISearchService by this point —
+            // AddApplicationServices's LikeSearchService default and
+            // AddInfrastructureServices's PostgresFullTextSearchService
+            // override (last-registered-wins in the real app) — so this
+            // must remove *all* matches, not assume a single one the way
+            // the DbContext swap above can. PostgresFullTextSearchService
+            // has no Sqlite translation path at all; swap back to the
+            // portable substitute (see ISearchService's doc comment).
+            services.RemoveAll<ISearchService>();
+            services.AddScoped<ISearchService, LikeSearchService>();
 
             // AddApiServices reads Jwt:SigningKey once, eagerly, inside the
             // AddJwtBearer(options => ...) delegate — that runs as part of

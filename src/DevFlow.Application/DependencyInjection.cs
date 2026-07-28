@@ -4,6 +4,7 @@ using DevFlow.Application.Attachments;
 using DevFlow.Application.Dashboard;
 using DevFlow.Application.Notifications;
 using DevFlow.Application.Projects;
+using DevFlow.Application.Search;
 using DevFlow.Application.Tasks;
 using DevFlow.Application.Team;
 using FluentValidation;
@@ -48,6 +49,14 @@ public static class DependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IAttachmentService, AttachmentService>();
         services.AddScoped<IDashboardService, DashboardService>();
+
+        // Default/portable implementation — AddInfrastructureServices
+        // overrides this to PostgresFullTextSearchService for the real app
+        // (registered after this one in Program.cs's composition chain, so
+        // the later registration wins); DevFlowWebApplicationFactory swaps
+        // it back to this one for tests, same as its Sqlite DbContext swap.
+        // See ISearchService's doc comment.
+        services.AddScoped<ISearchService, LikeSearchService>();
 
         return services;
     }

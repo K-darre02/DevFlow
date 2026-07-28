@@ -3,6 +3,7 @@ import { useAuthStore } from '../../auth/authStore'
 import { useRealtimeConnection } from '../../realtime/useRealtimeConnection'
 import { Button } from '../ui/Button'
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator'
+import { GlobalSearch } from './GlobalSearch'
 import { NotificationBell } from './NotificationBell'
 
 export function AppLayout() {
@@ -32,6 +33,7 @@ export function AppLayout() {
             </Link>
           </div>
           <div className="flex items-center gap-4">
+            <GlobalSearch />
             <ConnectionStatusIndicator status={connectionStatus} />
             <NotificationBell />
             {user && <span className="text-sm text-slate-600">{user.email}</span>}

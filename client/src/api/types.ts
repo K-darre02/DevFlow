@@ -216,3 +216,38 @@ export interface DashboardSummary {
   recentActivity: Activity[]
   overdueTasks: OverdueTask[]
 }
+
+export interface ProjectSearchResult {
+  id: string
+  name: string
+  isArchived: boolean
+  rank: number
+}
+
+export interface TaskSearchResult {
+  id: string
+  title: string
+  description: string | null
+  projectId: string
+  projectName: string
+  status: TaskItemStatus
+  rank: number
+}
+
+export interface UserSearchResult {
+  userId: string
+  email: string
+  role: TenantRole
+  rank: number
+}
+
+export interface SearchResultGroup<T> {
+  items: T[]
+  totalCount: number
+}
+
+export interface SearchResults {
+  projects: SearchResultGroup<ProjectSearchResult>
+  tasks: SearchResultGroup<TaskSearchResult>
+  users: SearchResultGroup<UserSearchResult>
+}
