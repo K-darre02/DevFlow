@@ -44,7 +44,7 @@ Concrete hard problems in this system and how the design addresses them — the 
 
 ## 6. Knowing where full-text search stops being enough
 
-**Problem**: SQL Server Full-Text Search ([Technical Decisions §8](05-technical-decisions.md)) is the pragmatic choice for search at this system's scale, but it isn't infinitely scalable — relevance ranking is basic, and query load on the primary database competes with transactional traffic as data grows.
+**Problem**: PostgreSQL's built-in full-text search ([Technical Decisions §8](05-technical-decisions.md)) is the pragmatic choice for search at this system's scale, but it isn't infinitely scalable — relevance ranking is basic, and query load on the primary database competes with transactional traffic as data grows.
 
 **Approach**: Search is isolated behind a single query-handler interface (`ISearchTasks`), so the implementation — currently a SQL full-text query — can be swapped for a dedicated search service (Azure Cognitive Search, Elasticsearch) without touching any caller. The trigger for making that swap would be either measurable relevance complaints or full-text query latency showing up in Application Insights as a meaningful fraction of database load.
 

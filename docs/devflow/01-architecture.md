@@ -8,7 +8,7 @@
 | Backend API | ASP.NET Core 8 Web API, C# | LTS runtime, strong typing, mature ecosystem |
 | Backend architecture | Clean Architecture with pragmatic Application Services, FluentValidation; MediatR retained narrowly for post-commit domain-event fan-out | Testable, layered, without paying for full CQRS ceremony on every operation; rationale in [Technical Decisions §1](05-technical-decisions.md) |
 | ORM | Entity Framework Core | Global query filters are the enforcement mechanism for tenant isolation — [Security §2](04-security.md#2-tenant-isolation) |
-| Database | Azure SQL Database | Managed PaaS, pairs naturally with EF Core, built-in transparent data encryption |
+| Database | PostgreSQL (Azure Database for PostgreSQL Flexible Server in production) | Managed PaaS, pairs naturally with EF Core (Npgsql), encryption at rest; chosen over Azure SQL/SQL Server for native arm64 Docker support in local development — [Technical Decisions §11](05-technical-decisions.md) |
 | Real-time | Azure SignalR Service | Managed WebSocket layer for live board updates; rationale in [Technical Decisions §5](05-technical-decisions.md) |
 | File storage | Azure Blob Storage | Tenant-scoped, accessed only via server-issued short-lived SAS URLs — never a public URL; [Technical Decisions §10](05-technical-decisions.md) |
 | Auth | ASP.NET Core Identity + JWT (access token + cookie-based refresh token) | Self-contained, fully demoable without external IdP setup; same-origin deployment (§2 below) is what makes the refresh cookie safe — [Technical Decisions §3, §6](05-technical-decisions.md) |
@@ -31,7 +31,7 @@ graph TB
         SWA["Azure Static Web Apps<br/>(hosts SPA + CDN)"]
         API["ASP.NET Core Web API<br/>(App Service)<br/>linked backend, proxied at /api/*"]
         SIGNALR["Azure SignalR Service"]
-        SQL["Azure SQL Database<br/>(shared schema, TenantId isolation)"]
+        DB["PostgreSQL<br/>(shared schema, TenantId isolation)"]
         BLOB["Azure Blob Storage<br/>(attachments, accessed via short-lived SAS only)"]
         KV["Azure Key Vault<br/>(secrets)"]
         AI["Application Insights"]
@@ -44,12 +44,12 @@ graph TB
     SWA -- "proxied /api/*" --> API
     SWA -- "proxied /hubs/*" --> SIGNALR
     API --> SIGNALR
-    API --> SQL
+    API --> DB
     API --> BLOB
     API --> KV
     API --> AI
     API --> FUNC
-    FUNC --> SQL
+    FUNC --> DB
     FUNC --> SENDGRID
 ```
 
@@ -84,7 +84,7 @@ sequenceDiagram
     participant A as API
     participant M as Tenant Middleware
     participant D as EF Core (Global Query Filter)
-    participant S as Azure SQL
+    participant S as PostgreSQL
 
     U->>A: Request + JWT (contains TenantId claim)
     A->>M: Validate JWT, extract TenantId
@@ -123,7 +123,7 @@ None of the above needs to be live to write and run code day-to-day. The inner l
 
 | Cloud service | Local substitute |
 |---|---|
-| Azure SQL Database | SQL Server container (`mcr.microsoft.com/mssql/server`) |
+| Azure Database for PostgreSQL | PostgreSQL container (`postgres:16`) — see [Technical Decisions §11](05-technical-decisions.md) for why Postgres over SQL Server |
 | Azure Blob Storage | Azurite (Microsoft's official Storage emulator) |
 | Azure SignalR Service | ASP.NET Core SignalR's built-in self-hosted mode — no external service needed for a single local instance |
 | Azure Key Vault | .NET User Secrets (`dotnet user-secrets`) |
@@ -131,14 +131,15 @@ None of the above needs to be live to write and run code day-to-day. The inner l
 | Application Insights | Console/file Serilog sink only; no telemetry export locally |
 
 ```yaml
-# docker-compose.yml (illustrative — created when implementation starts)
+# docker-compose.yml
 services:
-  sql:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+  postgres:
+    image: postgres:16
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${DEV_DB_PASSWORD}"
-    ports: ["1433:1433"]
+      POSTGRES_USER: devflow
+      POSTGRES_PASSWORD: "${DEV_DB_PASSWORD}"
+      POSTGRES_DB: devflow
+    ports: ["5432:5432"]
 
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite

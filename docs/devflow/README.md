@@ -20,8 +20,8 @@ DevFlow is a multi-tenant SaaS project management platform (a Kanban-style Jira/
 - **Frontend**: React 18 + TypeScript SPA, TanStack Query
 - **Multi-tenancy**: Shared database, shared schema, row-level isolation via `TenantId` (EF Core global query filters)
 - **Real-time**: Azure SignalR Service, per-project connection groups
-- **Hosting**: Microsoft Azure — Static Web Apps and App Service deployed same-origin via a linked backend (App Service, Azure SQL, Blob Storage, Key Vault, Application Insights)
-- **Local development**: Docker Compose (SQL Server container, Azurite, local SignalR) — no live Azure resources needed for day-to-day work
+- **Hosting**: Microsoft Azure — Static Web Apps and App Service deployed same-origin via a linked backend (App Service, Azure Database for PostgreSQL, Blob Storage, Key Vault, Application Insights)
+- **Local development**: Docker Compose (PostgreSQL container, Azurite, local SignalR) — no live Azure resources needed for day-to-day work; PostgreSQL was chosen over SQL Server specifically for native Apple Silicon (arm64) support while remaining production-ready on Azure — [Technical Decisions §11](05-technical-decisions.md)
 
 ## What This Project Demonstrates
 

@@ -144,7 +144,7 @@ erDiagram
 ## Indexing Strategy
 
 - Every tenant-scoped table: composite index `(TenantId, Id)` minimum; hot-path tables (`TaskItems`) add `(TenantId, ProjectId, Status)` to serve the board query directly — an integer column comparison, cheaper than the FK join the earlier table-based design would have required.
-- `TaskItems(TenantId, ProjectId)` with an included `Title`/`Description` — full-text search uses SQL Server Full-Text Search on this scope rather than a separate search service; the point at which that stops being sufficient is discussed in [Engineering Challenges §6](06-engineering-challenges.md).
+- `TaskItems(TenantId, ProjectId)` with an included `Title`/`Description` — full-text search uses PostgreSQL's built-in full-text search (`tsvector`/`tsquery`, GIN index) on this scope rather than a separate search service; the point at which that stops being sufficient is discussed in [Engineering Challenges §6](06-engineering-challenges.md).
 - `Notifications(TenantId, RecipientUserId, IsRead)` to serve the unread-count query efficiently.
 
 ## Migrations

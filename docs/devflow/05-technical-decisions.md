@@ -26,7 +26,7 @@ Architecture Decision Record (ADR) format: Context → Decision → Alternatives
 - *Schema-per-tenant*: stronger logical isolation, but every migration has to run against N schemas — operationally heavier, and EF Core's tooling isn't built around dynamic schema selection.
 - *Database-per-tenant*: strongest isolation (a query bug literally cannot cross tenants), closest to what a real enterprise SaaS might use — but means provisioning/monitoring/backing up N databases, which doesn't fit this system's scale or ops budget.
 
-**Consequences**: A missed `TenantId` filter is a code-level bug, not something the infrastructure prevents outright — which is why isolation is enforced globally (not per-query) and covered by cross-tenant integration tests rather than trusted to convention. The other side of this tradeoff is **noisy-neighbor risk**: every tenant shares the same database's compute and IO budget, with no per-tenant resource governor. One tenant with an unusually large or active workload can degrade query latency for every other tenant on the same database. This is accepted, explicitly, as out of scope for v1 — the documented mitigation path if it ever becomes real is Azure SQL Elastic Pools (still shared-schema, but with per-tenant resource ceilings), not a re-architecture. See [Quality Attributes §2](07-quality-attributes.md#2-scalability).
+**Consequences**: A missed `TenantId` filter is a code-level bug, not something the infrastructure prevents outright — which is why isolation is enforced globally (not per-query) and covered by cross-tenant integration tests rather than trusted to convention. The other side of this tradeoff is **noisy-neighbor risk**: every tenant shares the same database's compute and IO budget, with no per-tenant resource governor. One tenant with an unusually large or active workload can degrade query latency for every other tenant on the same database. This is accepted, explicitly, as out of scope for v1 — the documented mitigation path if it ever becomes real is scaling the Postgres instance vertically or moving to Citus-based sharding (Azure Cosmos DB for PostgreSQL) for true per-tenant resource isolation, not a re-architecture of the shared-schema model itself. See [Quality Attributes §2](07-quality-attributes.md#2-scalability).
 
 ## 3. JWT (stateless) over server-side sessions
 
@@ -85,11 +85,11 @@ Architecture Decision Record (ADR) format: Context → Decision → Alternatives
 
 **Consequences**: Simpler schema, one less join on the board query, and the terminal status ("Done") is simply the enum's defined last value — no string-matching, no extra `IsTerminal` flag needed. The tradeoff is genuine: if configurable per-project workflows ever become a real requirement, that's a schema migration (enum column → lookup table + FK), not a config toggle. Judged unlikely to be worth pre-building for a fixed, well-understood workflow.
 
-## 8. SQL Server Full-Text Search over a dedicated search service
+## 8. PostgreSQL Full-Text Search over a dedicated search service
 
 **Context**: Task search needs to cover title/description across a project.
 
-**Decision**: SQL Server Full-Text Search directly on `TaskItems`, scoped by the same `(TenantId, ProjectId)` index used elsewhere.
+**Decision**: PostgreSQL's built-in full-text search (`tsvector`/`tsquery`, backed by a GIN index) directly on `TaskItems`, scoped by the same `(TenantId, ProjectId)` index used elsewhere.
 
 **Alternatives considered**: A dedicated search service (Elasticsearch, Azure Cognitive Search) — better relevance tuning and scales further, but introduces a second system to keep in sync with the source of truth (indexing pipeline, eventual consistency) for a search surface that, at this system's expected data volume, doesn't need it.
 
@@ -116,3 +116,16 @@ Architecture Decision Record (ADR) format: Context → Decision → Alternatives
 - *Container-level access policy (private container, app-issued long-lived SAS at upload time)*: better than fully public, but a long-lived SAS baked in at upload time is effectively a permanent bearer credential for that file — if it leaks (browser history, referrer headers, logs), there's no way to revoke access short of rotating the whole container's keys.
 
 **Consequences**: Every attachment read re-runs authorization and produces a credential that expires in minutes, closing both gaps above at the cost of one extra request (client hits the download endpoint, then follows the redirect) instead of using a stored URL directly — a small latency cost for a materially stronger isolation guarantee, consistent with how every other tenant-scoped resource in this system is treated.
+
+## 11. PostgreSQL over SQL Server / Azure SQL
+
+**Context**: The original design specified Azure SQL Database / SQL Server, paired with EF Core's `Microsoft.EntityFrameworkCore.SqlServer` provider — a natural, well-trodden pairing on paper. Implementation happens locally on Apple Silicon (arm64) hardware, and Microsoft's SQL Server Linux container image is amd64-only; it has no native arm64 build, so under Docker Desktop on this hardware it either fails outright or runs emulated (QEMU), with materially worse performance and occasional stability issues for something meant to be the fast inner dev loop described in [Architecture §9](01-architecture.md#9-local-development).
+
+**Decision**: PostgreSQL replaces SQL Server, both for local Docker Compose development and as the target production database (Azure Database for PostgreSQL Flexible Server, in place of Azure SQL Database in the hosting plan). EF Core access goes through `Npgsql.EntityFrameworkCore.PostgreSQL` instead of `Microsoft.EntityFrameworkCore.SqlServer`.
+
+**Alternatives considered**:
+- *Keep SQL Server, accept emulated performance locally*: avoids a database swap, but permanently degrades the inner dev loop specifically on the hardware this project is actually built on — a real, ongoing cost, not a one-time inconvenience.
+- *Keep SQL Server, develop against a remote/cloud instance instead of local Docker*: sidesteps the arm64 problem, but trades away the documented no-cloud-dependency local workflow for routine feature work, and adds network latency and cost to every dev-loop iteration.
+- *PostgreSQL* (chosen): first-class arm64 support in its official Docker image, so local development runs natively without emulation — while remaining a fully production-ready, widely-used managed offering on Azure (Azure Database for PostgreSQL Flexible Server). The reasons the original SQL Server choice was made — managed PaaS, pairs cleanly with EF Core, encryption at rest by default — hold just as well for Postgres, so this isn't a production capability tradeoff, purely a local-development one.
+
+**Consequences**: Changes the EF Core provider (Npgsql), the local Docker Compose service (`postgres:16` instead of `mcr.microsoft.com/mssql/server`), and the production hosting target (Azure Database for PostgreSQL Flexible Server instead of Azure SQL Database). It also changes the full-text search mechanism from SQL Server Full-Text Search to PostgreSQL's `tsvector`/`tsquery` — see the revised [§8](#8-postgresql-full-text-search-over-a-dedicated-search-service) above. Everything else — the multi-tenancy model, the EF Core global query filter mechanism, every other ADR in this document — is unaffected. This is a database-engine substitution made for local-development-environment reasons, not a re-architecture.

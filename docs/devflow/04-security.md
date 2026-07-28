@@ -42,7 +42,7 @@ Two invariants enforced at the application-service level (not just the DB constr
 
 - All connection strings, API keys (SendGrid, SignalR, Blob Storage) live in Azure Key Vault; App Service reads them via managed identity at startup — nothing sensitive in `appsettings.json`, environment variables checked into CI config, or source control. (Local development substitutes .NET User Secrets and emulators instead of live Key Vault access — see [Architecture §9](01-architecture.md#9-local-development).)
 - TLS enforced end-to-end; HTTP requests redirected to HTTPS; HSTS enabled.
-- Data at rest encrypted via Azure SQL Transparent Data Encryption and Blob Storage's default encryption-at-rest.
+- Data at rest encrypted via Azure Database for PostgreSQL's encryption at rest (AES-256, Azure-managed keys by default) and Blob Storage's default encryption-at-rest.
 
 ## 7. Rate Limiting & Abuse Prevention
 
@@ -54,7 +54,7 @@ Two invariants enforced at the application-service level (not just the DB constr
 | Risk | Mitigation |
 |---|---|
 | Broken Access Control | Dual-layer tenant isolation (§2) + server-side RBAC policies (§3) |
-| Cryptographic Failures | TLS in transit, TDE/Blob encryption at rest (§6), hashed passwords and refresh tokens (§4) |
+| Cryptographic Failures | TLS in transit, database/Blob encryption at rest (§6), hashed passwords and refresh tokens (§4) |
 | Injection | Parameterized EF Core queries only, FluentValidation at the boundary (§5) |
 | Insecure Design | Tenant isolation designed as a structural property (global query filter), not a per-endpoint convention; attachment access designed around short-lived signed URLs rather than public object storage (§5) |
 | Security Misconfiguration | Secrets in Key Vault, no default credentials, HTTPS/HSTS enforced (§6), same-origin deployment avoiding permissive CORS (§4) |
