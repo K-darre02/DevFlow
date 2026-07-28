@@ -423,6 +423,12 @@ dist-ssr/
 build/
 out/
 
+# client/'s Vite build outputs directly into DevFlow.Web's static host
+# (see client/vite.config.ts) — generated, hashed filenames every build,
+# not meant to be committed. .gitkeep preserves the empty directory.
+/src/DevFlow.Web/wwwroot/*
+!/src/DevFlow.Web/wwwroot/.gitkeep
+
 # TypeScript
 *.tsbuildinfo
 

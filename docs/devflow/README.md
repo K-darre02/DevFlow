@@ -17,7 +17,7 @@ DevFlow is a multi-tenant SaaS project management platform (a Kanban-style Jira/
 ## Stack at a Glance
 
 - **Backend**: ASP.NET Core 8 Web API, C#, Clean Architecture with pragmatic Application Services, EF Core (MediatR used narrowly for post-commit domain-event fan-out, not as the primary request pattern)
-- **Frontend**: React 18 + TypeScript SPA, TanStack Query
+- **Frontend**: React 19 + TypeScript SPA, TanStack Query
 - **Multi-tenancy**: Shared database, shared schema, row-level isolation via `TenantId` (EF Core global query filters)
 - **Real-time**: Azure SignalR Service, per-project connection groups
 - **Hosting**: Microsoft Azure — Static Web Apps and App Service deployed same-origin via a linked backend (App Service, Azure Database for PostgreSQL, Blob Storage, Key Vault, Application Insights)

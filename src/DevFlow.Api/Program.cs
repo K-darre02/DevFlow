@@ -32,6 +32,10 @@ try
     {
         app.UseSwagger();
         app.UseSwaggerUI();
+        // Dev-only — see the DevFrontendCorsPolicy comment in DependencyInjection.cs.
+        // Fully qualified: DevFlow.Application also has a DependencyInjection class,
+        // and both namespaces are already in scope via the usings above.
+        app.UseCors(DevFlow.Api.DependencyInjection.DevFrontendCorsPolicy);
     }
 
     app.UseHttpsRedirection();

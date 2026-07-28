@@ -8,4 +8,10 @@ var app = builder.Build();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// React Router handles routes like /login client-side. Without this, a hard
+// refresh or direct link to /login would 404 here (no physical file at that
+// path) instead of loading index.html and letting the client-side router
+// take over.
+app.MapFallbackToFile("index.html");
+
 app.Run();

@@ -4,7 +4,7 @@
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Frontend | React 18 + TypeScript, Vite, TanStack Query, Zustand, Tailwind CSS + shadcn/ui | Typed SPA stack; TanStack Query owns server-state caching and is what makes optimistic drag-and-drop board updates tractable ([Engineering Challenges §2](06-engineering-challenges.md)) |
+| Frontend | React 19 + TypeScript, Vite, TanStack Query, Zustand, Tailwind CSS + shadcn/ui | Typed SPA stack; TanStack Query owns server-state caching and is what makes optimistic drag-and-drop board updates tractable ([Engineering Challenges §2](06-engineering-challenges.md)) |
 | Backend API | ASP.NET Core 8 Web API, C# | LTS runtime, strong typing, mature ecosystem |
 | Backend architecture | Clean Architecture with pragmatic Application Services, FluentValidation; MediatR retained narrowly for post-commit domain-event fan-out | Testable, layered, without paying for full CQRS ceremony on every operation; rationale in [Technical Decisions §1](05-technical-decisions.md) |
 | ORM | Entity Framework Core | Global query filters are the enforcement mechanism for tenant isolation — [Security §2](04-security.md#2-tenant-isolation) |

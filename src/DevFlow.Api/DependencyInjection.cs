@@ -14,8 +14,25 @@ namespace DevFlow.Api;
 
 public static class DependencyInjection
 {
+    // Only ever applied in Development (see Program.cs) — production serves
+    // the SPA same-origin via a linked backend (ADR 6), so no CORS policy is
+    // needed there at all. Locally there are two possible dev flows: the
+    // Vite dev server (proxies /api/*, so the browser never sees a
+    // cross-origin request there either) and running the built SPA through
+    // DevFlow.Web directly, which *is* cross-origin from DevFlow.Api's
+    // default port — this policy covers that second flow.
+    public const string DevFrontendCorsPolicy = "DevFrontend";
+
     public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddCors(options =>
+        {
+            options.AddPolicy(DevFrontendCorsPolicy, policy => policy
+                .WithOrigins("http://localhost:5173", "http://localhost:5284", "https://localhost:7061")
+                .AllowAnyHeader()
+                .AllowAnyMethod());
+        });
+
         services.AddControllers()
             // Status/Priority (and any future enum) serialize as their names
             // ("InProgress", "High") rather than raw integers — matches
